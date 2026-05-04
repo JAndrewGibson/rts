@@ -1,8 +1,9 @@
+import eventlet
+eventlet.monkey_patch()
+
 import os
 from flask import Flask, render_template, send_from_directory, request
 from flask_socketio import SocketIO, emit, join_room, leave_room
-from models import db, Player, UnitState
-from flask_migrate import Migrate
 import mimetypes
 import random
 import string
@@ -10,21 +11,14 @@ import string
 mimetypes.add_type('application/javascript', '.js')
 mimetypes.add_type('text/css', '.css')
 
+try:
+    import redis
+    print(f"DEBUG: Redis package imported successfully. Version: {redis.__version__}")
+except ImportError as e:
+    print(f"DEBUG: Failed to import redis package: {e}")
+
 app = Flask(__name__, static_folder='.', static_url_path='')
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'doodle-rts-secret!')
-
-# Fix for Render's DATABASE_URL (postgres:// -> postgresql://)
-database_url = os.environ.get('DATABASE_URL', 'sqlite:///game.db')
-if database_url.startswith("postgres://"):
-    database_url = database_url.replace("postgres://", "postgresql://", 1)
-app.config['SQLALCHEMY_DATABASE_URI'] = database_url
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-db.init_app(app)
-migrate = Migrate(app, db)
-
-with app.app_context():
-    db.create_all()
 
 # Use Redis if available (for Render deployment)
 redis_url = os.environ.get('REDIS_URL')
