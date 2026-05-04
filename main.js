@@ -296,7 +296,7 @@ class DoodleRTS {
                 break;
 
             case 'unit_doodle':
-                html = this.getUnitWikiHtml('doodle', "The backbone of your economy. Doodles build structures and gather resources. They aren't much in a fight, but without them, you have no army.");
+                html = this.getUnitWikiHtml('doodle', "The backbone of your economy. Doodles build structures and gather resources. They aren't much in a fight, but they have a trick up their sleeve: they can instantly <strong>Swarm!</strong>, splitting into 3 fast-moving Stickmen to overwhelm invaders.");
                 break;
             case 'unit_vat':
                 html = this.getUnitWikiHtml('vat', "A heavy-duty liquid hauler. Vats move slowly but can carry massive amounts of Ink or Coffee. Note: A Vat can only hold one type of liquid at a time!");
@@ -367,15 +367,18 @@ class DoodleRTS {
             case 'mech_economy':
                 html = `
                     <h3 class="scribble">Economy & Logistics</h3>
-                    <p>Success depends on maintaining efficient resource pipelines.</p>
+                    <p>Success depends on maintaining efficient resource pipelines. Resources must be gathered and then returned to a drop-off point (Castle or Vat) to be usable.</p>
                     <ul>
-                        <li><strong>Ink</strong>: Primary currency. Gathered from Splats or reclaimed from Splatters.</li>
-                        <li><strong>Shavings</strong>: Collected from Eraser Piles. Used for repairs and basic upgrades.</li>
-                        <li><strong>Coal</strong>: Raw mineral found in mines. Must be refined.</li>
-                        <li><strong>Graphite</strong>: Refined in the Furnace. Required for the Coffee Shop.</li>
+                        <li><strong>Ink</strong>: Primary currency for units and buildings. Gathered from Ink Splats.</li>
+                        <li><strong>Coal</strong>: A raw mineral. While it has no direct use, it is the only source of Graphite.</li>
+                        <li><strong>Graphite</strong>: Produced by refining Coal in a <strong>Furnace</strong>. Required for advanced technology like Protractors and the Coffee Shop.</li>
+                        <li><strong>Shavings</strong>: Quick material used for basic upgrades and repairs. Found in Eraser Piles.</li>
+                        <li><strong>Coffee</strong>: A late-game resource. Provides powerful speed and damage auras.</li>
                     </ul>
+                    <h4 class="scribble">The Graphite Chain</h4>
+                    <p>To access late-game units, you must establish a Graphite chain: <strong>Doodle</strong> → <strong>Coal Mine</strong> → <strong>Furnace</strong> → <strong>Castle</strong>. Once you have Graphite, the <strong>Sharpener</strong> and <strong>Coffee Shop</strong> become available.</p>
                     <h4 class="scribble">Liquid Exclusivity</h4>
-                    <p>Vats are powerful but specialized. A Vat containing Ink <strong>cannot</strong> accept Coffee until it has been fully drained at a Castle, and vice versa.</p>
+                    <p>Vats are powerful but specialized. A Vat containing Ink <strong>cannot</strong> accept Coffee until it has been fully drained at a Castle, and vice versa. Managing your Vat fleet is key to large-scale operations.</p>
                 `;
                 break;
             case 'mech_staples':
@@ -438,26 +441,60 @@ class DoodleRTS {
 
     getDependencyMapHtml() {
         return `
-            <h3 class="scribble">Dependency Map</h3>
-            <div style="position: relative; height: 500px; border: 1px solid #eee; background: #fafafa; overflow: hidden;">
-                <div style="display: flex; flex-direction: column; align-items: center; gap: 40px; padding-top: 40px;">
-                    <div style="padding: 10px; border: 2px solid var(--text-color); background: white;">HOME CASTLE</div>
-                    <div style="display: flex; gap: 30px;">
-                        <div style="display: flex; flex-direction: column; gap: 20px;">
-                            <div style="padding: 5px; border: 1px solid var(--text-color);">DOJO</div>
-                            <div style="padding: 5px; border: 1px solid var(--text-color);">SALOON</div>
-                            <div style="padding: 5px; border: 1px solid var(--text-color);">DOCKS</div>
-                        </div>
-                        <div style="display: flex; flex-direction: column; gap: 20px;">
-                            <div style="padding: 5px; border: 1px solid var(--text-color);">FURNACE (Coal)</div>
-                            <div style="padding: 5px; border: 1px solid #e67e22; background: #fff5e6;">COFFEE SHOP (Graphite)</div>
-                        </div>
+            <h3 class="scribble">The Paper Hierarchy (Dependency Map)</h3>
+            <p>Every empire starts with a single stroke. Follow the ink to unlock advanced technology.</p>
+            
+            <div class="wiki-tree" style="display: flex; flex-direction: column; gap: 30px; padding: 20px; background: #fafafa; border: 2px dashed var(--text-color); border-radius: 10px;">
+                <!-- Tier 1 -->
+                <div style="display: flex; justify-content: center;">
+                    <div style="text-align: center;">
+                        <div style="padding: 15px; border: 3px solid var(--text-color); background: white; font-weight: 800; border-radius: 8px; box-shadow: 4px 4px 0 var(--text-color);">HOME CASTLE</div>
+                        <div style="margin-top: 10px; font-size: 0.8rem;">Produces: <strong>Doodles</strong></div>
                     </div>
                 </div>
-                <div style="position: absolute; bottom: 10px; right: 10px; font-size: 0.8rem; color: #999;">
-                    * All buildings require Doodles to construct.
+
+                <div style="text-align: center; font-size: 1.5rem; opacity: 0.5;">↓</div>
+
+                <!-- Tier 2 -->
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
+                    <!-- Logistics -->
+                    <div style="border: 2px solid #95a5a6; padding: 15px; border-radius: 8px; background: white;">
+                        <h4 class="scribble" style="margin-top: 0;">Logistics</h4>
+                        <div style="margin-bottom: 10px; padding: 5px; border: 1px solid #7f8c8d;"><strong>FURNACE</strong><br><small>Uses Coal → Graphite</small></div>
+                        <div style="padding: 5px; border: 1px solid #7f8c8d;"><strong>COLLECTION VAT</strong><br><small>Heavy Ink Transport</small></div>
+                    </div>
+
+                    <!-- Military -->
+                    <div style="border: 2px solid #e67e22; padding: 15px; border-radius: 8px; background: white;">
+                        <h4 class="scribble" style="margin-top: 0;">Barracks</h4>
+                        <div style="margin-bottom: 5px; padding: 5px; border: 1px solid #d35400;"><strong>DOJO</strong><br><small>Ninjas & Stickmen</small></div>
+                        <div style="margin-bottom: 5px; padding: 5px; border: 1px solid #d35400;"><strong>SALOON</strong><br><small>Cowboys</small></div>
+                        <div style="padding: 5px; border: 1px solid #d35400;"><strong>DOCKS</strong><br><small>Pirates & Paperplanes</small></div>
+                    </div>
+
+                    <!-- Mystical -->
+                    <div style="border: 2px solid #9b59b6; padding: 15px; border-radius: 8px; background: white;">
+                        <h4 class="scribble" style="margin-top: 0;">Specialized</h4>
+                        <div style="padding: 5px; border: 1px solid #8e44ad;"><strong>THE RIP</strong><br><small>Pious Doodles</small></div>
+                    </div>
+                </div>
+
+                <div style="text-align: center; font-size: 1.5rem; opacity: 0.5;">↓</div>
+
+                <!-- Tier 3 -->
+                <div style="display: flex; justify-content: center; gap: 40px;">
+                    <div style="text-align: center;">
+                        <div style="padding: 15px; border: 3px solid #3498db; background: #ebf5fb; border-radius: 8px; box-shadow: 4px 4px 0 #3498db;">SHARPENER</div>
+                        <div style="margin-top: 10px; font-size: 0.8rem;">Unlocks: <strong>PROTRACTORS</strong><br><small>(Requires Graphite)</small></div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="padding: 15px; border: 3px solid #6f4e37; background: #fdf5e6; border-radius: 8px; box-shadow: 4px 4px 0 #6f4e37;">COFFEE SHOP</div>
+                        <div style="margin-top: 10px; font-size: 0.8rem;">Provides: <strong>Combat Auras</strong><br><small>(Requires Graphite)</small></div>
+                    </div>
                 </div>
             </div>
+            
+            <p style="margin-top: 20px; font-style: italic; opacity: 0.7;">* Note: Advanced structures like the Sharpener and Coffee Shop require <strong>Graphite</strong>, which must be refined from <strong>Coal</strong> at a Furnace.</p>
         `;
     }
 

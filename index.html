@@ -44,6 +44,9 @@
                             <li><a href="#" class="wiki-link" data-page="unit_cowboy">Cowboy</a></li>
                             <li><a href="#" class="wiki-link" data-page="unit_pirate">Pirate</a></li>
                             <li><a href="#" class="wiki-link" data-page="unit_pious">Pious Doodle</a></li>
+                            <li><a href="#" class="wiki-link" data-page="unit_stickman">Stickman</a></li>
+                            <li><a href="#" class="wiki-link" data-page="unit_paperplane">Paperplane</a></li>
+                            <li><a href="#" class="wiki-link" data-page="unit_protractor">Protractor</a></li>
                             <li style="margin-top: 10px;"><strong class="scribble">Buildings</strong></li>
                             <li><a href="#" class="wiki-link" data-page="build_castle">Home Castle</a></li>
                             <li><a href="#" class="wiki-link" data-page="build_dojo">Dojo</a></li>
@@ -51,7 +54,9 @@
                             <li><a href="#" class="wiki-link" data-page="build_docks">Docks</a></li>
                             <li><a href="#" class="wiki-link" data-page="build_furnace">Furnace</a></li>
                             <li><a href="#" class="wiki-link" data-page="build_therip">The Rip</a></li>
+                            <li><a href="#" class="wiki-link" data-page="build_sharpener">Sharpener</a></li>
                             <li><a href="#" class="wiki-link" data-page="build_coffee">Coffee Shop</a></li>
+                            <li><a href="#" class="wiki-link" data-page="unit_vat">Collection Vat</a></li>
                             <li style="margin-top: 10px;"><strong class="scribble">Mechanics</strong></li>
                             <li><a href="#" class="wiki-link" data-page="mech_combat">Combat (RPS)</a></li>
                             <li><a href="#" class="wiki-link" data-page="mech_economy">Economy</a></li>
@@ -71,13 +76,15 @@
         </div>
 
         <div id="balance-page" class="menu-overlay" style="display: none;">
-            <div class="setup-content" style="max-width: 1000px; width: 95%;">
-                <h2>Unit Balancing</h2>
-                <div class="setup-grid" id="balance-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
-                    <!-- Stat inputs will be injected here -->
+            <div class="setup-content" style="max-width: 1100px; width: 95%; height: 90vh; display: flex; flex-direction: column;">
+                <h2 class="scribble">Unit Balancing</h2>
+                <div id="balance-scroll-area" style="flex-grow: 1; overflow-y: auto; margin-top: 10px; padding: 20px; border: 2px solid var(--text-color); border-radius: 8px; background: rgba(255,255,255,0.5);">
+                    <div class="setup-grid" id="balance-grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem;">
+                        <!-- Stat inputs will be injected here -->
+                    </div>
                 </div>
-                <div class="menu-buttons" style="margin-top: 2rem;">
-                    <button id="btn-balance-save" class="btn-menu btn-start">apply stats</button>
+                <div class="menu-buttons" style="margin-top: 1.5rem; flex-shrink: 0;">
+                    <button id="btn-balance-save" class="btn-menu btn-start">apply to game</button>
                     <button id="btn-balance-back" class="btn-menu">back</button>
                 </div>
             </div>
