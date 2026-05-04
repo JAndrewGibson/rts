@@ -1,0 +1,32 @@
+# Virtual Environment
+venv/
+ENV/
+env/
+
+# Python Cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Agent-focused documentation
+agents.md
+features.md
+game_design_checklist.md
+game_design.md
+
+# Database
+game.db
+*.sqlite3
+
+# Environment variables
+.env
+
+# OS Files
+.DS_Store
+Thumbs.db
+rts.code-workspace
+castle.png
+cowboy.png
+ninja.png
+pirate.webp

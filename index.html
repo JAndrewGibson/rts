@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Doodle RTS | Notepad Tactics</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div id="game-container">
+        <div id="main-menu" class="menu-overlay">
+            <h1 class="scribble">Doodle RTS</h1>
+            <div class="menu-buttons">
+                <button id="btn-host-menu" class="btn-menu btn-start">host game</button>
+                <button id="btn-join-menu" class="btn-menu">join game</button>
+                <button id="btn-illustrator" class="btn-menu">illustrator</button>
+                <button id="btn-tech-tree" class="btn-menu">tech tree</button>
+                <button id="btn-balance" class="btn-menu">balance stats</button>
+                <button id="btn-credits" class="btn-menu">credits</button>
+            </div>
+            <p class="credits">crafted by drew</p>
+        </div>
+
+        <!-- Doodle Wiki & Tech Tree -->
+        <div id="tech-tree-page" class="menu-overlay" style="display: none;">
+            <div class="setup-content" style="max-width: 1100px; width: 95%; height: 90vh; display: flex; flex-direction: column;">
+                <h2 class="scribble">Doodle Wiki</h2>
+                <div class="wiki-container" style="display: flex; flex-grow: 1; overflow: hidden; margin-top: 10px; border: 2px solid var(--text-color); border-radius: 8px;">
+                    <!-- Sidebar -->
+                    <div id="wiki-sidebar" style="width: 220px; border-right: 2px solid var(--text-color); background: rgba(255,255,255,0.5); overflow-y: auto; padding: 15px;">
+                        <h4 class="scribble">Categories</h4>
+                        <ul style="list-style: none; padding: 0; margin: 0;">
+                            <li><a href="#" class="wiki-link" data-page="index">Welcome</a></li>
+                            <li><a href="#" class="wiki-link" data-page="tree">Dependency Map</a></li>
+                            <li style="margin-top: 10px;"><strong class="scribble">Units</strong></li>
+                            <li><a href="#" class="wiki-link" data-page="unit_doodle">Simple Doodle</a></li>
+                            <li><a href="#" class="wiki-link" data-page="unit_vat">Collection Vat</a></li>
+                            <li><a href="#" class="wiki-link" data-page="unit_ninja">Ninja</a></li>
+                            <li><a href="#" class="wiki-link" data-page="unit_cowboy">Cowboy</a></li>
+                            <li><a href="#" class="wiki-link" data-page="unit_pirate">Pirate</a></li>
+                            <li style="margin-top: 10px;"><strong class="scribble">Buildings</strong></li>
+                            <li><a href="#" class="wiki-link" data-page="build_castle">Home Castle</a></li>
+                            <li><a href="#" class="wiki-link" data-page="build_dojo">Dojo</a></li>
+                            <li><a href="#" class="wiki-link" data-page="build_saloon">Saloon</a></li>
+                            <li><a href="#" class="wiki-link" data-page="build_docks">Docks</a></li>
+                            <li><a href="#" class="wiki-link" data-page="build_furnace">Furnace</a></li>
+                            <li><a href="#" class="wiki-link" data-page="build_coffee">Coffee Shop</a></li>
+                            <li style="margin-top: 10px;"><strong class="scribble">Mechanics</strong></li>
+                            <li><a href="#" class="wiki-link" data-page="mech_combat">Combat (RPS)</a></li>
+                            <li><a href="#" class="wiki-link" data-page="mech_economy">Economy</a></li>
+                        </ul>
+                    </div>
+                    <!-- Content -->
+                    <div id="tech-tree-content" style="flex-grow: 1; overflow-y: auto; padding: 30px; background: white;">
+                        <!-- Wiki Page Content -->
+                    </div>
+                </div>
+                <div class="menu-buttons" style="margin-top: 1rem; flex-shrink: 0;">
+                    <button id="btn-tech-back" class="btn-menu">Back to Menu</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="balance-page" class="menu-overlay" style="display: none;">
+            <div class="setup-content" style="max-width: 1000px; width: 95%;">
+                <h2>Unit Balancing</h2>
+                <div class="setup-grid" id="balance-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                    <!-- Stat inputs will be injected here -->
+                </div>
+                <div class="menu-buttons" style="margin-top: 2rem;">
+                    <button id="btn-balance-save" class="btn-menu btn-start">apply stats</button>
+                    <button id="btn-balance-back" class="btn-menu">back</button>
+                </div>
+            </div>
+        </div>
+
+
+        <div id="join-setup" class="menu-overlay" style="display: none;">
+            <div class="setup-content">
+                <h2>Join Game</h2>
+                <div class="setup-item">
+                    <label for="join-room">Room ID</label>
+                    <input type="text" id="join-room" placeholder="Enter room id...">
+                </div>
+                <div class="setup-item" style="margin-top: 1rem;">
+                    <label for="join-username">Your Name</label>
+                    <input type="text" id="join-username" placeholder="Enter your name...">
+                </div>
+                <div class="menu-buttons" style="margin-top: 2rem;">
+                    <button id="btn-join-confirm" class="btn-menu btn-start">join</button>
+                    <button id="btn-join-back" class="btn-menu">back</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="lobby-page" class="menu-overlay" style="display: none;">
+            <div class="setup-content" style="max-width: 1100px; width: 95%;">
+                <div class="lobby-header" style="width: 100%; display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; border-bottom: 4px solid var(--text-color); padding-bottom: 1rem;">
+                    <h2 class="scribble" style="margin: 0; font-size: 2.5rem;">Game Lobby</h2>
+                    <div style="background: var(--text-color); color: white; padding: 10px 20px; border-radius: 8px; box-shadow: 4px 4px 0px var(--secondary-color);">
+                        <span class="scribble" style="font-size: 0.8rem; opacity: 0.8; display: block; text-transform: uppercase;">Room Code</span>
+                        <span id="lobby-room-code" class="scribble" style="font-size: 2rem; letter-spacing: 4px;"></span>
+                    </div>
+                </div>
+                
+                <div class="lobby-container" style="display: flex; gap: 30px; text-align: left;">
+                    <!-- Left: Slots -->
+                    <div style="flex: 1.5;">
+                        <h4 class="scribble" style="margin-bottom: 10px; opacity: 0.7;">Players & Slots</h4>
+                        <div id="player-list" class="lobby-slots-grid">
+                            <!-- 8 slots will be injected here -->
+                        </div>
+                    </div>
+
+                    <!-- Right: Settings -->
+                    <div style="flex: 1; border-left: 2px dashed var(--line-color); padding-left: 30px;">
+                        <h4 class="scribble" style="margin-bottom: 20px; opacity: 0.7;">Game Settings</h4>
+                        <div class="setup-grid" style="grid-template-columns: 1fr; gap: 1.5rem;">
+                            <div class="setup-item">
+                                <label for="setup-players">Max Players</label>
+                                <select id="setup-players" class="lobby-setting" disabled>
+                                    <option value="2">2 Players</option>
+                                    <option value="4">4 Players</option>
+                                    <option value="8" selected>8 Players</option>
+                                </select>
+                            </div>
+                            <div class="setup-item">
+                                <label for="setup-units">Max Units</label>
+                                <select id="setup-units" class="lobby-setting" disabled>
+                                    <option value="50">50 per player</option>
+                                    <option value="100" selected>100 per player</option>
+                                    <option value="200">200 per player</option>
+                                </select>
+                            </div>
+                            <div class="setup-item">
+                                <label for="setup-map">Map Size</label>
+                                <select id="setup-map" class="lobby-setting" disabled>
+                                    <option value="small">Small (2000x2000)</option>
+                                    <option value="medium" selected>Medium (4000x4000)</option>
+                                    <option value="large">Large (8000x8000)</option>
+                                </select>
+                            </div>
+                            <div class="setup-item">
+                                <label for="setup-resources">Starting Resources</label>
+                                <select id="setup-resources" class="lobby-setting" disabled>
+                                    <option value="low">Low (200 Ink)</option>
+                                    <option value="standard" selected>Standard (500 Ink)</option>
+                                    <option value="high">High (1000 Ink)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="menu-buttons" style="margin-top: 2.5rem; flex-direction: row; justify-content: center; gap: 20px;">
+                    <button id="btn-lobby-ready" class="btn-menu">ready up</button>
+                    <button id="btn-lobby-start" class="btn-menu btn-start" style="display: none;">start game</button>
+                    <button id="btn-lobby-leave" class="btn-menu">leave</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="credits-page" class="menu-overlay" style="display: none;">
+            <div class="credits-content">
+                <img src="andrew.jpg" alt="Andrew" class="portrait">
+                <h2>A Message from Andrew</h2>
+                <p>Hey there! I'm Andrew, I was inspired to try to create my own RTS because I love playing AOE2 with my
+                    friends. While I'm not huge into the RTS genre, still just a noobie actually, I love making things!
+                    Please enjoy this bare-bones RTS and I hope you enjoy playing with your friends!</p>
+                <p><a href="https://github.com/JAndrewGibson/rts" target="_blank">The repo is public on github, so don't
+                        be afraid to fork the project and add your own spin!</a></p>
+                <button id="btn-credits-back" class="btn-menu">back</button>
+            </div>
+        </div>
+
+        <!-- Illustrator Page -->
+        <div id="illustrator-page" class="menu-overlay" style="display: none;">
+            <div class="setup-content" style="max-width: 1200px; width: 95%; height: 90vh; display: flex; flex-direction: column;">
+                <div style="display: flex; flex-direction: column; align-items: center; margin-bottom: 2rem; gap: 15px;">
+                    <h2 class="scribble" style="font-size: 4rem;">The Illustrator</h2>
+                    <div class="menu-buttons" style="flex-direction: row; width: auto; gap: 15px;">
+                        <button id="btn-pack-apply" class="btn-menu btn-start" style="font-size: 1.1rem; padding: 0.6rem 1.2rem; border-color: var(--secondary-color); color: var(--secondary-color); box-shadow: 6px 6px 0px var(--secondary-color);">apply to game</button>
+                        <button id="btn-pack-import" class="btn-menu" style="font-size: 1.1rem; padding: 0.6rem 1.2rem;">import pack</button>
+                        <button id="btn-pack-export" class="btn-menu btn-start" style="font-size: 1.1rem; padding: 0.6rem 1.2rem;">export pack</button>
+                        <button id="btn-pack-clear-all" class="btn-menu" style="font-size: 1.1rem; padding: 0.6rem 1.2rem; border-color: #e74c3c; color: #e74c3c; box-shadow: 6px 6px 0px #e74c3c;">clear all</button>
+                    </div>
+                </div>
+
+                <div class="illustrator-container" style="display: flex; flex-grow: 1; gap: 20px; overflow: hidden;">
+                    <!-- Sidebar: Asset Selection -->
+                    <div class="illustrator-sidebar" style="width: 250px; border: 2px solid var(--text-color); background: rgba(255,255,255,0.5); overflow-y: auto; padding: 15px; text-align: left;">
+                        <h4 class="scribble">Select Asset</h4>
+                        <div id="asset-list" style="display: flex; flex-direction: column; gap: 5px;">
+                            <!-- Asset items injected here -->
+                        </div>
+                        <h4 id="action-header" class="scribble" style="margin-top: 15px;">Action</h4>
+                        <div id="action-list" style="display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px;">
+                            <!-- Actions injected here -->
+                        </div>
+                    </div>
+
+                    <!-- Main Canvas Area -->
+                    <div class="illustrator-main" style="flex-grow: 1; display: flex; flex-direction: column; gap: 20px; align-items: center; justify-content: center; background: white; border: 2px solid var(--text-color); position: relative;">
+                        <div id="canvas-container" style="position: relative; width: 400px; height: 400px; background: var(--bg-color); border: 1px solid #ccc; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
+                            <!-- Onion Skin Layer -->
+                            <canvas id="onion-skin-canvas" width="400" height="400" style="position: absolute; top: 0; left: 0; pointer-events: none; opacity: 0.3;"></canvas>
+                            <!-- Drawing Layer -->
+                            <canvas id="illustrator-canvas" width="400" height="400" style="position: absolute; top: 0; left: 0;"></canvas>
+                        </div>
+
+                        <!-- Toolbar -->
+                        <div class="illustrator-toolbar" style="display: flex; gap: 15px; background: #eee; padding: 10px; border-radius: 8px; border: 2px solid var(--text-color);">
+                            <button id="tool-pen" class="btn-menu active" style="font-size: 0.8rem; padding: 5px 10px; box-shadow: 2px 2px 0 var(--text-color);">pen</button>
+                            <button id="tool-pencil" class="btn-menu" style="font-size: 0.8rem; padding: 5px 10px; box-shadow: 2px 2px 0 var(--text-color);">pencil</button>
+                            <button id="tool-eraser" class="btn-menu" style="font-size: 0.8rem; padding: 5px 10px; box-shadow: 2px 2px 0 var(--text-color);">eraser</button>
+                            <button id="tool-undo" class="btn-menu" style="font-size: 0.8rem; padding: 5px 10px; box-shadow: 2px 2px 0 var(--text-color);">undo</button>
+                            <button id="tool-redo" class="btn-menu" style="font-size: 0.8rem; padding: 5px 10px; box-shadow: 2px 2px 0 var(--text-color);">redo</button>
+                            <button id="tool-clear" class="btn-menu" style="font-size: 0.8rem; padding: 5px 10px; box-shadow: 2px 2px 0 var(--text-color);">clear</button>
+                            <div style="width: 2px; background: #ccc;"></div>
+                            <div id="locked-palette" style="display: flex; gap: 5px; align-items: center;">
+                                <button class="btn-menu active" id="color-outline" style="width: 24px; height: 24px; background: #111111; padding: 0; box-shadow: 2px 2px 0px #000;" title="Outline (Near Black)"></button>
+                                <button class="btn-menu" id="color-primary" style="width: 24px; height: 24px; background: #cccccc; padding: 0; box-shadow: 2px 2px 0px #000;" title="Primary (Light Gray)"></button>
+                                <button class="btn-menu" id="color-secondary" style="width: 24px; height: 24px; background: #888888; padding: 0; box-shadow: 2px 2px 0px #000;" title="Secondary (Medium Gray)"></button>
+                                <button class="btn-menu" id="color-tertiary" style="width: 24px; height: 24px; background: #444444; padding: 0; box-shadow: 2px 2px 0px #000;" title="Tertiary (Dark Gray)"></button>
+                            </div>
+                            <!-- Full Color Picker (Hidden by default, shown for favicon) -->
+                            <div id="full-color-picker" style="display: none; align-items: center; gap: 5px;">
+                                <label style="font-size: 0.7rem;">Color</label>
+                                <input type="color" id="tool-color-full" value="#2c3e50" style="width: 30px; height: 30px; padding: 0; border: 1px solid #000; cursor: pointer;">
+                            </div>
+                            <input type="range" id="tool-weight" min="1" max="20" value="3" style="width: 80px;">
+                        </div>
+                    </div>
+
+                    <!-- Frame Management -->
+            <div id="illustrator-right-sidebar" class="illustrator-frames" style="width: 200px; border: 2px solid var(--text-color); background: rgba(255,255,255,0.5); overflow-y: auto; overflow-x: hidden; padding: 15px;">
+                <h4 class="scribble">Frames</h4>
+                <div id="frame-list" style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;">
+                    <!-- Frame thumbnails injected here -->
+                </div>
+                <div style="margin-top: 15px; display: flex; flex-direction: column; gap: 8px;">
+                    <button id="btn-new-frame" class="btn-menu scribble" style="font-size: 0.7rem; width: 100%;">+ Blank</button>
+                    <button id="btn-copy-frame" class="btn-menu scribble" style="font-size: 0.7rem; width: 100%;">+ Copy</button>
+                </div>
+
+                <div id="preview-panel" style="margin-top: 25px; border-top: 1px solid #ccc; padding-top: 15px;">
+                    <h4 class="scribble">Preview</h4>
+                    <div id="animation-preview" style="width: 120px; height: 120px; background: white; border: 1px solid #000; margin: 10px auto;"></div>
+                    
+                    <div style="margin-top: 10px;">
+                        <select id="preview-loop-type" class="" style="width: 100%; font-size: 0.8rem; padding: 5px; cursor: pointer; background: white; border: 2px solid var(--text-color); font-family: inherit; font-weight: bold;">
+                            <option value="loop">Loop</option>
+                            <option value="boomerang">Boomerang</option>
+                        </select>
+                    </div>
+
+                    <div style="margin-top: 15px;">
+                        <label class="" style="font-size: 0.6rem; display: block; margin-bottom: 5px;"><span class="scribble">Speed:</span> <span id="preview-speed-val" class="scribble">8</span></label>
+                        <input type="range" id="preview-speed" min="1" max="24" value="8" style="width: 100%;">
+                    </div>
+                </div>
+            </div>
+                </div>
+
+                <div class="menu-buttons" style="margin-top: 1.5rem; flex-shrink: 0;">
+                    <button id="btn-illustrator-back" class="btn-menu">Back to Menu</button>
+                </div>
+            </div>
+        </div>
+
+        <canvas id="game-canvas"></canvas>
+
+        <!-- Pause Overlay -->
+        <div id="pause-overlay" class="menu-overlay" style="display: none; background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); z-index: 9999;">
+            <div class="setup-content" style="background: white; border: 4px solid var(--text-color); padding: 40px; text-align: center;">
+                <h1 class="scribble" style="font-size: 4rem; color: var(--text-color); margin-bottom: 20px;">GAME PAUSED</h1>
+                <p id="pause-message" class="scribble" style="font-size: 1.5rem; color: var(--text-color);"></p>
+                <p class="scribble" style="font-size: 1rem; opacity: 0.6; margin-top: 20px;">Waiting for player to return...</p>
+            </div>
+        </div>
+
+        <!-- Forfeit Overlay -->
+        <div id="forfeit-overlay" class="menu-overlay" style="display: none; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); z-index: 10000;">
+            <div class="setup-content" style="background: white; border: 4px solid var(--text-color); padding: 50px; text-align: center;">
+                <h1 id="forfeit-title" class="scribble" style="font-size: 5rem; color: #e74c3c; margin-bottom: 20px;">FORFEIT!</h1>
+                <p id="forfeit-message" class="scribble" style="font-size: 2rem; color: var(--text-color);"></p>
+                <div class="menu-buttons" style="margin-top: 30px;">
+                    <button onclick="window.location.reload()" class="btn-menu btn-start">return to menu</button>
+                </div>
+            </div>
+        </div>
+
+
+        <div id="squad-panel">
+            <!-- Squad indicators will be injected here -->
+        </div>
+
+        <div id="game-hud">
+            <!-- Top Resources Bar -->
+            <div id="top-bar" class="hud-panel">
+                <div class="resource-item">
+                    <div class="resource-icon icon-ink"></div>
+                    <span id="res-ink">500</span>
+                </div>
+                <div class="resource-item">
+                    <div class="resource-icon icon-eraser"></div>
+                    <span id="res-shavings">100</span>
+                </div>
+                <div class="resource-item">
+                    <div class="resource-icon icon-coal"></div>
+                    <span id="res-coal">0</span>
+                </div>
+                <div class="resource-item">
+                    <div class="resource-icon icon-graphite"></div>
+                    <span id="res-graphite">0</span>
+                </div>
+                <div class="resource-item">
+                    <div class="resource-icon icon-coffee"></div>
+                    <span id="res-coffee">0</span>
+                </div>
+                <div class="resource-item">
+                    <div class="resource-icon icon-units"></div>
+                    <span id="res-units">0 / 100</span>
+                </div>
+            </div>
+
+            <!-- Bottom Control Panel -->
+            <div id="bottom-bar" class="hud-panel">
+                <div id="minimap"></div>
+
+                <div id="selection-panel">
+                    <div class="unit-card" id="active-selection" style="display: none;">
+                        <div class="unit-portrait">✎</div>
+                        <div class="unit-info">
+                            <h3 id="unit-name">Doodle Scout</h3>
+                            <div class="hp-bar">
+                                <div class="hp-fill" id="unit-hp"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="no-selection">
+                        <p style="opacity: 0.5; font-style: italic; font-weight: 600;">select a doodle...</p>
+                    </div>
+                </div>
+
+                <div id="actions-panel" style="display: flex; gap: 10px; align-items: center;">
+                    <!-- Doodle actions -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Core Scripts -->
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script type="module" src="main.js?v=2"></script>
+</body>
+
+</html>

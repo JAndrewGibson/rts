@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: doodle-rts
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --worker-class eventlet -w 1 app:app
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: doodle-rts-redis
+          property: connectionString
+
+  - type: redis
+    name: doodle-rts-redis
+    ipAllowList: [] # Only allow internal connections
