@@ -13,7 +13,9 @@ export class UI {
             units: document.getElementById('res-units'),
             coal: document.getElementById('res-coal'),
             graphite: document.getElementById('res-graphite'),
-            coffee: document.getElementById('res-coffee')
+            coffee: document.getElementById('res-coffee'),
+            tooltipArea: document.getElementById('tooltip-area'),
+            tooltipText: document.getElementById('tooltip-text')
         };
         
         this.resources = {
@@ -163,8 +165,13 @@ export class UI {
 
         const font = this.game.world ? this.game.world.customFont : null;
         
-        // If no custom font drawn, just use standard text
-        if (!font || Object.keys(font).length === 0) {
+        // If no custom font drawn, OR if we are in a fallback state, just use standard text
+        // We also check if the first character (usually 'A' or '1') is loaded to avoid 0-width renders
+        const isFontReady = font && Object.keys(font).length > 0 && 
+                           Object.values(font)[0].complete && 
+                           Object.values(font)[0].naturalWidth > 0;
+
+        if (!isFontReady) {
             element.textContent = text;
             // Headers need to be much larger on the main menu
             element.style.fontSize = (element.tagName === 'H1') ? '5rem' : '1.2em';
@@ -192,22 +199,21 @@ export class UI {
         const chars = text.toUpperCase().split('');
         chars.forEach(char => {
             const fontSource = font[char];
-            if (fontSource) {
+            // Only use custom font if image is actually loaded and has dimensions
+            if (fontSource && fontSource.complete && fontSource.naturalWidth > 0) {
                 const charSpan = document.createElement('span');
-                const ratio = fontSource.width / fontSource.height;
+                const ratio = fontSource.naturalWidth / fontSource.naturalHeight;
                 charSpan.style.height = scale;
                 charSpan.style.width = `calc(${scale} * ${ratio})`;
-                charSpan.style.display = 'inline-block';
-                charSpan.style.backgroundColor = 'currentColor';
                 charSpan.style.webkitMaskImage = `url(${fontSource.src})`;
                 charSpan.style.maskImage = `url(${fontSource.src})`;
-                charSpan.style.webkitMaskSize = 'contain';
-                charSpan.style.maskSize = 'contain';
+                charSpan.style.webkitMaskSize = '100% 100%';
+                charSpan.style.maskSize = '100% 100%';
                 charSpan.style.webkitMaskRepeat = 'no-repeat';
                 charSpan.style.maskRepeat = 'no-repeat';
-                charSpan.style.webkitMaskPosition = 'center bottom';
-                charSpan.style.maskPosition = 'center bottom';
-                charSpan.style.pointerEvents = 'none';
+                charSpan.style.backgroundColor = 'currentColor';
+                charSpan.style.display = 'inline-block';
+                charSpan.setAttribute('aria-hidden', 'true');
                 element.appendChild(charSpan);
             } else if (char === ' ') {
                 const space = document.createElement('span');
@@ -228,11 +234,17 @@ export class UI {
     updateSelection(selection) {
         const actionsPanel = document.getElementById('actions-panel');
         if (actionsPanel) actionsPanel.innerHTML = '';
+        this.showTooltip(''); // Clear tooltip on selection change
 
         if (selection.length === 1) {
             const primary = selection[0];
             this.elements.activeSelection.style.display = 'flex';
             this.elements.noSelection.style.display = 'none';
+
+            // Show building tooltip by default if it's a building
+            if (this.game.config.unitStats[primary.type] && this.game.config.unitStats[primary.type].description) {
+                this.showTooltip(this.game.config.unitStats[primary.type].description);
+            }
             
             if (primary.type === 'castle') {
                 this.renderDoodleText(this.elements.unitName, "Home Castle");
@@ -246,9 +258,43 @@ export class UI {
                 btn.onclick = () => {
                     this.game.world.spawnSimpleDoodle(primary);
                 };
+                
+                btn.onmouseover = () => this.showTooltip("Spawn a new Doodle worker (100 Ink).");
+                btn.onmouseout = () => this.showTooltip(this.game.config.unitStats.castle.description);
+                
                 actionsPanel.appendChild(btn);
+
+                // Add Oil-based Ink upgrade if not researched
+                const p = primary.playerId;
+                const researched = this.game.world.playerUpgrades[p] && this.game.world.playerUpgrades[p].oil_based_ink;
+                if (!researched && !primary.trainingQueue.includes('oil_based_ink')) {
+                    const upBtn = document.createElement('button');
+                    upBtn.className = 'btn-menu scribble';
+                    upBtn.style.fontSize = '0.8rem';
+                    upBtn.innerHTML = `Oil-based Ink<br><small>(800 Ink, 200 Graphite)</small>`;
+                    upBtn.onclick = () => {
+                        if (this.resources.ink >= 800 && this.resources.graphite >= 200) {
+                            this.resources.ink -= 800;
+                            this.resources.graphite -= 200;
+                            this.updateResourceDisplay();
+                            primary.trainingQueue.push('oil_based_ink');
+                        }
+                    };
+                    upBtn.onmouseover = () => this.showTooltip("Late-game upgrade. Makes units immune to Scotch Tape slow effects.");
+                    actionsPanel.appendChild(upBtn);
+                }
+
+                this.addUpgradeButtons(primary, actionsPanel);
             } else if (primary.type === 'doodle') {
                 this.renderDoodleText(this.elements.unitName, "SIMPLE DOODLE");
+                
+                // Show cargo info
+                const cargoInfo = document.createElement('div');
+                cargoInfo.className = 'scribble';
+                cargoInfo.style.fontSize = '0.8rem';
+                cargoInfo.style.marginBottom = '5px';
+                cargoInfo.innerHTML = `Cargo: ${Math.floor(primary.cargo.amount)}/${primary.cargo.capacity} ${primary.cargo.type || ''}`;
+                actionsPanel.appendChild(cargoInfo);
                 
                 // Swarm Button
                 const swarmBtn = document.createElement('button');
@@ -260,7 +306,29 @@ export class UI {
                     this.game.world.selection = [];
                     this.updateSelection([]);
                 };
+                
+                swarmBtn.onmouseover = () => this.showTooltip("Split this Doodle into 3 weak but fast Stickmen.");
+                swarmBtn.onmouseout = () => this.showTooltip(this.game.config.unitStats.doodle.description);
+                
                 actionsPanel.appendChild(swarmBtn);
+
+                // Drop Off Button
+                if (primary.cargo.amount > 0) {
+                    const dropBtn = document.createElement('button');
+                    dropBtn.className = 'btn-menu scribble';
+                    dropBtn.innerHTML = `Drop Off<br><small>(${Math.floor(primary.cargo.amount)} ${primary.cargo.type || ''})</small>`;
+                    dropBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        const dropOff = primary.findNearestDropPoint(primary.cargo.type);
+                        if (dropOff) {
+                            const currentTask = primary.taskQueue.shift();
+                            primary.taskQueue.unshift({ type: 'deposit', target: dropOff, resume: currentTask });
+                            primary.target = null;
+                            primary.currentPath = [];
+                        }
+                    };
+                    actionsPanel.appendChild(dropBtn);
+                }
 
                 this.addBuildButtons(actionsPanel);
             } else if (primary.type === 'ninja') {
@@ -273,8 +341,96 @@ export class UI {
                 specialBtn.onclick = () => {
                     this.game.world.createInkCloud(primary.x, primary.y);
                 };
+                
+                specialBtn.onmouseover = () => this.showTooltip("Create a cloud of ink that grants 70% evasion to nearby allies.");
+                specialBtn.onmouseout = () => this.showTooltip(this.game.config.unitStats.ninja.description);
+                
                 actionsPanel.appendChild(specialBtn);
-            } else if (['dojo', 'saloon', 'docks', 'sharpener'].includes(primary.type)) {
+            } else if (primary.type === 'piousDoodle') {
+                this.renderDoodleText(this.elements.unitName, "PIOUS DOODLE");
+                
+                // Supplies Display
+                const suppliesInfo = document.createElement('div');
+                suppliesInfo.className = 'scribble';
+                suppliesInfo.style.fontSize = '0.8rem';
+                suppliesInfo.style.marginBottom = '5px';
+                suppliesInfo.innerHTML = `Staples: ${primary.staples} | Tape: ${primary.tape}`;
+                actionsPanel.appendChild(suppliesInfo);
+
+                // Pray Button
+                const prayBtn = document.createElement('button');
+                prayBtn.className = 'btn-menu scribble';
+                prayBtn.innerHTML = `Pray<br><small>(at The Rip)</small>`;
+                prayBtn.onclick = () => {
+                    const theRip = this.game.world.buildings.find(b => b.type === 'theRip' && b.playerId === primary.playerId && !b.isUnderConstruction);
+                    if (theRip) {
+                        primary.taskQueue = [{ type: 'pray', target: theRip }];
+                        primary.isPraying = true;
+                        primary.target = null;
+                        primary.currentPath = [];
+                    } else {
+                        console.log("No completed Rip found!");
+                    }
+                };
+                prayBtn.onmouseover = () => this.showTooltip("Commune with the Great Architect at The Rip to manifest office supplies.");
+                actionsPanel.appendChild(prayBtn);
+
+                // Staple Button
+                if (primary.staples > 0) {
+                    const stapleBtn = document.createElement('button');
+                    stapleBtn.className = 'btn-menu scribble';
+                    stapleBtn.innerHTML = `Staple Target<br><small>(Use 1)</small>`;
+                    stapleBtn.onclick = () => {
+                        this.game.input.startTargeting((target) => {
+                            if (target && target instanceof Unit) {
+                                primary.staples--;
+                                this.game.world.stapleUnit(target);
+                                this.updateSelection([primary]);
+                            }
+                        });
+                    };
+                    stapleBtn.onmouseover = () => this.showTooltip("Pin an enemy unit to the page, completely immobilizing them.");
+                    actionsPanel.appendChild(stapleBtn);
+                }
+
+                // Tape Button
+                if (primary.tape > 0) {
+                    const tapeBtn = document.createElement('button');
+                    tapeBtn.className = 'btn-menu scribble';
+                    tapeBtn.innerHTML = `Scotch Tape<br><small>(Place 10 tiles)</small>`;
+                    tapeBtn.onclick = () => {
+                        this.game.input.startTargeting((target) => {
+                            // Tape placement uses an angle. For simplicity, we use the direction from primary to click.
+                            const angle = Math.atan2(target.y - primary.y, target.x - primary.x);
+                            primary.tape--;
+                            this.game.world.createTapeLine(target.x, target.y, angle);
+                            this.updateSelection([primary]);
+                        }, true); // Is coordinate
+                    };
+                    tapeBtn.onmouseover = () => this.showTooltip("Place a line of scotch tape that drastically slows units.");
+                    actionsPanel.appendChild(tapeBtn);
+                }
+
+                // Craft Remover Button
+                if (primary.staples >= 10) {
+                    const removerBtn = document.createElement('button');
+                    removerBtn.className = 'btn-menu scribble';
+                    removerBtn.innerHTML = `Craft Remover<br><small>(10 Staples)</small>`;
+                    removerBtn.onclick = () => {
+                        this.game.input.startTargeting((target) => {
+                            if (target && target instanceof Unit && target.playerId === primary.playerId) {
+                                primary.staples -= 10;
+                                target.hasStapleRemover = true;
+                                this.game.ui.showTooltip(`${target.type} equipped with Staple Remover!`);
+                                this.updateSelection([primary]);
+                            }
+                        });
+                    };
+                    removerBtn.onmouseover = () => this.showTooltip("Spend 10 staples to equip a friendly unit with a Staple Remover.");
+                    actionsPanel.appendChild(removerBtn);
+                }
+
+            } else if (['dojo', 'saloon', 'docks', 'sharpener', 'furnace', 'vat', 'theRip'].includes(primary.type)) {
                 this.renderDoodleText(this.elements.unitName, `${primary.type.toUpperCase()}`);
                 this.addUpgradeButtons(primary, actionsPanel);
                 this.addTrainingButtons(primary, actionsPanel);
@@ -375,6 +531,13 @@ export class UI {
                     img.style.width = '80%';
                     img.style.height = '80%';
                     img.style.objectFit = 'contain';
+                    img.onerror = () => {
+                        img.style.display = 'none';
+                        const textFallback = document.createElement('span');
+                        textFallback.textContent = type.charAt(0).toUpperCase();
+                        textFallback.style.fontSize = '1.5rem';
+                        iconBox.appendChild(textFallback);
+                    };
                     iconBox.appendChild(img);
                 } else {
                     iconBox.innerHTML = iconPath || '❓';
@@ -446,8 +609,45 @@ export class UI {
         info.innerHTML = html;
     }
 
-    addBuildButtons(panel) {
-        const buildings = ['dojo', 'saloon', 'docks', 'furnace', 'sharpener', 'coffeeShop', 'vat'];
+    addBuildButtons(panel, category = null) {
+        if (!category) {
+            const infraBtn = document.createElement('button');
+            infraBtn.className = 'btn-menu scribble';
+            infraBtn.innerHTML = 'Infrastructure';
+            infraBtn.onclick = () => {
+                panel.innerHTML = '';
+                this.addBuildButtons(panel, 'infrastructure');
+            };
+            panel.appendChild(infraBtn);
+
+            const militaryBtn = document.createElement('button');
+            militaryBtn.className = 'btn-menu scribble';
+            militaryBtn.innerHTML = 'Military';
+            militaryBtn.onclick = () => {
+                panel.innerHTML = '';
+                this.addBuildButtons(panel, 'military');
+            };
+            panel.appendChild(militaryBtn);
+            return;
+        }
+
+        const infra = ['furnace', 'vat', 'coffeeShop'];
+        const military = ['dojo', 'saloon', 'docks', 'sharpener', 'theRip'];
+        const buildings = category === 'infrastructure' ? infra : military;
+
+        // Add back button
+        const backBtn = document.createElement('button');
+        backBtn.className = 'btn-menu scribble';
+        backBtn.innerHTML = '← Back';
+        backBtn.onclick = () => {
+            panel.innerHTML = '';
+            // Need to recreate the initial doodle actions... 
+            // Re-render the whole doodle menu
+            const primary = this.game.world.selection[0];
+            this.updateSelection(this.game.world.selection);
+        };
+        panel.appendChild(backBtn);
+
         buildings.forEach(type => {
             const stats = this.game.config.unitStats[type];
             if (!stats) return;
@@ -471,6 +671,18 @@ export class UI {
                 }
                 this.game.world.startPlacement(type);
             };
+            
+            btn.onmouseover = () => this.showTooltip(stats.description || `Construct a ${type}`);
+            btn.onmouseout = () => {
+                // Return to building description if a building is selected
+                if (this.game.world.selection.length === 1) {
+                    const primary = this.game.world.selection[0];
+                    this.showTooltip(this.game.config.unitStats[primary.type]?.description || '');
+                } else {
+                    this.showTooltip('');
+                }
+            };
+
             panel.appendChild(btn);
         });
     }
@@ -481,6 +693,7 @@ export class UI {
         if (building.type === 'saloon') types = ['cowboy'];
         if (building.type === 'docks') types = ['pirate', 'paperplane'];
         if (building.type === 'sharpener') types = ['protractor'];
+        if (building.type === 'theRip') types = ['piousDoodle'];
 
         types.forEach(type => {
             const stats = this.game.config.unitStats[type];
@@ -506,11 +719,23 @@ export class UI {
                     building.trainingQueue.push(type);
                 }
             };
+
+            btn.onmouseover = () => this.showTooltip(stats.description || `Train a ${type}`);
+            btn.onmouseout = () => {
+                if (this.game.world.selection.length === 1) {
+                    const primary = this.game.world.selection[0];
+                    this.showTooltip(this.game.config.unitStats[primary.type]?.description || '');
+                } else {
+                    this.showTooltip('');
+                }
+            };
+
             panel.appendChild(btn);
         });
     }
 
     addUpgradeButtons(building, panel) {
+        if (typeof building.getTrainingType !== 'function') return;
         const unitType = building.getTrainingType();
         const availableUpgrades = Object.entries(this.game.config.upgrades)
             .filter(([id, up]) => up.type === unitType);
@@ -541,6 +766,17 @@ export class UI {
                     this.updateSelection(this.game.world.selection); // Refresh UI
                 }
             };
+
+            btn.onmouseover = () => this.showTooltip(up.description || `Research ${up.name}`);
+            btn.onmouseout = () => {
+                if (this.game.world.selection.length === 1) {
+                    const primary = this.game.world.selection[0];
+                    this.showTooltip(this.game.config.unitStats[primary.type]?.description || '');
+                } else {
+                    this.showTooltip('');
+                }
+            };
+
             panel.appendChild(btn);
         });
     }
@@ -599,6 +835,10 @@ export class UI {
                 console.log("No empty vats nearby!");
             }
         };
+        
+        btn.onmouseover = () => this.showTooltip("Fill a nearby empty Vat with Coffee to-go.");
+        btn.onmouseout = () => this.showTooltip(this.game.config.unitStats.coffeeShop.description);
+        
         panel.appendChild(btn);
     }
 
@@ -615,6 +855,10 @@ export class UI {
                 this.updateSelection([vat]); // Refresh
             }
         };
+        
+        btn.onmouseover = () => this.showTooltip("Spill the contents of the Vat on the ground (Coffee creates a speed aura).");
+        btn.onmouseout = () => this.showTooltip(this.game.config.unitStats.vat.description);
+        
         panel.appendChild(btn);
     }
 
@@ -643,6 +887,36 @@ export class UI {
             overlay.style.display = 'flex';
             this.processNodeForFont(overlay);
         }
+    }
+
+    showTooltip(text) {
+        if (!this.elements.tooltipArea || !this.elements.tooltipText) return;
+        
+        if (!text) {
+            this.hideTooltip();
+            return;
+        }
+
+        // Use renderDoodleText for the tooltip to keep the aesthetic consistent
+        this.renderDoodleText(this.elements.tooltipText, text);
+        this.elements.tooltipArea.classList.add('visible');
+    }
+
+    hideTooltip() {
+        if (!this.elements.tooltipArea) return;
+
+        // If something is selected, return to its description
+        if (this.game.world && this.game.world.selection.length === 1) {
+            const primary = this.game.world.selection[0];
+            const stats = this.game.config.unitStats[primary.type];
+            if (stats && stats.description) {
+                this.renderDoodleText(this.elements.tooltipText, stats.description);
+                this.elements.tooltipArea.classList.add('visible');
+                return;
+            }
+        }
+
+        this.elements.tooltipArea.classList.remove('visible');
     }
 }
 
