@@ -2,6 +2,7 @@ import os
 from flask import Flask, render_template, send_from_directory, request
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from models import db, Player, UnitState
+from flask_migrate import Migrate
 import mimetypes
 import random
 import string
@@ -11,10 +12,16 @@ mimetypes.add_type('text/css', '.css')
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'doodle-rts-secret!')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///game.db')
+
+# Fix for Render's DATABASE_URL (postgres:// -> postgresql://)
+database_url = os.environ.get('DATABASE_URL', 'sqlite:///game.db')
+if database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql://", 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)
+migrate = Migrate(app, db)
 
 with app.app_context():
     db.create_all()
@@ -22,6 +29,7 @@ with app.app_context():
 # Use Redis if available (for Render deployment)
 redis_url = os.environ.get('REDIS_URL')
 if redis_url:
+    # When using multiple gunicorn workers, we MUST use Redis for Socket.IO
     socketio = SocketIO(app, cors_allowed_origins="*", message_queue=redis_url)
 else:
     socketio = SocketIO(app, cors_allowed_origins="*")

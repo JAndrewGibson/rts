@@ -2273,7 +2273,14 @@ export class World {
     }
 
     update(dt) {
-        this.buildings.forEach(b => b.update(dt));
+        // Update Buildings (Backwards for safe removal)
+        for (let i = this.buildings.length - 1; i >= 0; i--) {
+            const b = this.buildings[i];
+            b.update(dt);
+            if (b.hp <= 0) {
+                this.handleBuildingDeath(b, i);
+            }
+        }
 
         // Clean up old tape tiles
         this.tapeTiles = this.tapeTiles.filter(tile => tile.update(dt));
@@ -2453,6 +2460,52 @@ export class World {
         // Remove from selection if it was selected
         this.selection = this.selection.filter(u => u !== unit);
         this.game.ui.updateSelection(this.selection);
+
+        // If all units are dead and it's a computer player, maybe they lost?
+        // But usually RTS depends on Buildings (Castle).
+    }
+
+    handleBuildingDeath(building, index) {
+        // Large splatter for buildings
+        this.splatters.push(new Splatter(this.game, building.x, building.y, 150));
+
+        // Remove from world
+        this.buildings.splice(index, 1);
+        this.updateGrid();
+
+        // Remove from selection if it was selected
+        this.selection = this.selection.filter(u => u !== building);
+        this.game.ui.updateSelection(this.selection);
+
+        // If it was a castle, check win/loss
+        if (building.type === 'castle') {
+            this.checkWinLossConditions();
+        }
+    }
+
+    checkWinLossConditions() {
+        if (this.game.config.gameState !== 'PLAYING') return;
+
+        const localId = this.game.config.localPlayerId;
+        
+        // Find local player's castle
+        const myCastle = this.buildings.find(b => b.type === 'castle' && b.playerId === localId);
+        
+        if (!myCastle) {
+            this.game.ui.showDefeat();
+            return;
+        }
+
+        // Count how many players still have castles
+        const activePlayers = new Set();
+        this.buildings.forEach(b => {
+            if (b.type === 'castle') activePlayers.add(b.playerId);
+        });
+
+        // If only one player left and it's me, I win
+        if (activePlayers.size === 1 && activePlayers.has(localId)) {
+            this.game.ui.showVictory();
+        }
     }
 
     createCoffeeField(x, y) {

@@ -9,11 +9,6 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Agent-focused documentation
-agents.md
-features.md
-game_design_checklist.md
-game_design.md
 
 # Database
 game.db

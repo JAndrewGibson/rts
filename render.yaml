@@ -7,6 +7,11 @@ services:
     envVars:
       - key: SECRET_KEY
         generateValue: true
+      - key: DATABASE_URL
+        fromService:
+          type: database
+          name: doodle-rts-db
+          property: connectionString
       - key: REDIS_URL
         fromService:
           type: redis
@@ -16,3 +21,7 @@ services:
   - type: redis
     name: doodle-rts-redis
     ipAllowList: [] # Only allow internal connections
+
+databases:
+  - name: doodle-rts-db
+    plan: free

@@ -300,6 +300,28 @@
         </div>
 
 
+        <!-- Victory Overlay -->
+        <div id="victory-overlay" class="menu-overlay" style="display: none; background: rgba(255,255,255,0.7); backdrop-filter: blur(8px); z-index: 10000;">
+            <div class="setup-content" style="background: white; border: 4px solid var(--text-color); padding: 50px; text-align: center;">
+                <h1 class="scribble" style="font-size: 5rem; color: #2ecc71; margin-bottom: 20px;">VICTORY!</h1>
+                <p class="scribble" style="font-size: 2rem; color: var(--text-color);">The page is yours, Illustrator.</p>
+                <div class="menu-buttons" style="margin-top: 30px;">
+                    <button onclick="window.location.reload()" class="btn-menu btn-start">return to menu</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Defeat Overlay -->
+        <div id="defeat-overlay" class="menu-overlay" style="display: none; background: rgba(0,0,0,0.8); backdrop-filter: blur(8px); z-index: 10000;">
+            <div class="setup-content" style="background: white; border: 4px solid var(--text-color); padding: 50px; text-align: center;">
+                <h1 class="scribble" style="font-size: 5rem; color: #e74c3c; margin-bottom: 20px;">DEFEAT</h1>
+                <p class="scribble" style="font-size: 2rem; color: var(--text-color);">Your sketch has been erased.</p>
+                <div class="menu-buttons" style="margin-top: 30px;">
+                    <button onclick="window.location.reload()" class="btn-menu btn-start">try again</button>
+                </div>
+            </div>
+        </div>
+
         <div id="squad-panel">
             <!-- Squad indicators will be injected here -->
         </div>

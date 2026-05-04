@@ -889,6 +889,24 @@ export class UI {
         }
     }
 
+    showVictory() {
+        const overlay = document.getElementById('victory-overlay');
+        if (overlay) {
+            overlay.style.display = 'flex';
+            this.processNodeForFont(overlay);
+            this.game.config.gameState = 'GAME_OVER';
+        }
+    }
+
+    showDefeat() {
+        const overlay = document.getElementById('defeat-overlay');
+        if (overlay) {
+            overlay.style.display = 'flex';
+            this.processNodeForFont(overlay);
+            this.game.config.gameState = 'GAME_OVER';
+        }
+    }
+
     showTooltip(text) {
         if (!this.elements.tooltipArea || !this.elements.tooltipText) return;
         
