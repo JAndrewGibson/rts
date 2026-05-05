@@ -644,17 +644,7 @@ class Unit {
                     this.wiggle += this.wiggleSpeed * dt;
                 } else {
                     // Deposit logic
-                    if (this.cargo.type === 'ink') {
-                        this.game.ui.addResource('ink', this.cargo.amount);
-                    } else if (this.cargo.type === 'coal') {
-                        if (target.type === 'furnace' || target.hasBuiltInFurnace) {
-                            this.game.ui.addResource('graphite', this.cargo.amount);
-                        } else {
-                            this.game.ui.addResource('coal', this.cargo.amount);
-                        }
-                    } else if (this.cargo.type === 'coffee') {
-                        this.game.ui.addResource('coffee', this.cargo.amount);
-                    }
+                    this.game.world.addPlayerResource(this.playerId, this.cargo.type, this.cargo.amount, target);
 
                     if (target.type === 'vat') {
                         // If depositing into a vat, transfer cargo
@@ -774,6 +764,22 @@ render(ctx) {
         ctx.arc(0, 0, this.radius + 8, 0, Math.PI * 2);
         ctx.stroke();
         ctx.setLineDash([]);
+    }
+ 
+    // Handle Construction Progress for Units
+    if (this.isUnderConstruction) {
+        ctx.save();
+        ctx.globalAlpha = 0.4 + Math.sin(Date.now() / 200) * 0.1;
+        
+        // Progress bar
+        const barW = this.radius * 2;
+        const barH = 6;
+        ctx.strokeStyle = '#2c3e50';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(-barW / 2, -this.radius - 20, barW, barH);
+        ctx.fillStyle = '#f1c40f';
+        ctx.fillRect(-barW / 2 + 0.5, -this.radius - 19.5, (barW - 1) * (this.constructionProgress || 0), barH - 1);
+        ctx.restore();
     }
 
     // Draw Unit Image (fallback to procedural if not loaded)
@@ -1722,6 +1728,11 @@ export class World {
         console.log(`Upgrade complete: ${upgrade.name} for player ${playerId}`);
     }
 
+    applyConfig(config, room) {
+        this.game.config = config;
+        this.init(room);
+    }
+
     init(room) {
         // Start camera at a more central position
         this.camera = { x: 0, y: 0 };
@@ -1732,6 +1743,13 @@ export class World {
         this.resources = [];
         this.barriers = [];
         this.splatters = [];
+        this.inkClouds = [];
+        this.tapeTiles = [];
+        this.coffeeFields = [];
+        
+        this.playerResources = {};
+        this.aiControllers = [];
+        
         const localId = this.game.config.localPlayerId || 1;
         this.nextUnitId = localId * 100000;
 
@@ -1752,6 +1770,30 @@ export class World {
             if (slot.type !== 'player' && slot.type !== 'computer') continue;
 
             const pId = i + 1; // pId is 1-indexed based on slot
+            
+            // Initialize resources for this player
+            let startingInk = 500;
+            if (this.game.config.startResources === 'low') startingInk = 200;
+            if (this.game.config.startResources === 'high') startingInk = 1000;
+            
+            this.playerResources[pId] = {
+                ink: startingInk,
+                eraser: 100,
+                coal: 0,
+                graphite: 0,
+                coffee: 0
+            };
+
+            // If local player, sync UI
+            if (pId === localId) {
+                this.game.ui.resources = this.playerResources[pId];
+                this.game.ui.updateResourceDisplay();
+            }
+
+            // If computer, add AI controller (Host only controls AI)
+            if (slot.type === 'computer' && this.game.isHost) {
+                this.aiControllers.push(new AIController(this.game, pId));
+            }
             
             // Spawn Castle for each player
             const angle = i * (Math.PI * 2 / totalSlots);
@@ -2308,6 +2350,11 @@ export class World {
 
         // Update Ink Clouds
         this.inkClouds = this.inkClouds.filter(c => c.update(dt));
+
+        // Update AI (Host only)
+        if (this.game.isHost && this.game.config.gameState === 'PLAYING') {
+            this.aiControllers.forEach(ai => ai.update(dt));
+        }
 
         if (this.game.config.gameState !== 'PLAYING') return;
 
@@ -3083,6 +3130,126 @@ export class World {
         target.isStapled = true;
         target.struggleTimer = 0;
         target.state = 'stapled';
+    }
+
+    addPlayerResource(playerId, type, amount, target) {
+        if (!this.playerResources[playerId]) return;
+        
+        const pool = this.playerResources[playerId];
+        if (type === 'ink') {
+            pool.ink += amount;
+        } else if (type === 'coal') {
+            if (target && (target.type === 'furnace' || target.hasBuiltInFurnace)) {
+                pool.graphite += amount;
+            } else {
+                pool.coal += amount;
+            }
+        } else if (type === 'coffee') {
+            pool.coffee += amount;
+        } else if (type === 'eraser' || type === 'shavings') {
+            pool.eraser += amount;
+        }
+
+        // If it's the local player, sync UI
+        if (playerId === this.game.config.localPlayerId) {
+            this.game.ui.updateResourceDisplay();
+        }
+    }
+}
+
+class AIController {
+    constructor(game, playerId) {
+        this.game = game;
+        this.playerId = playerId;
+        this.thinkTimer = 0;
+        this.thinkInterval = 3; // Think every 3 seconds
+        this.strategy = 'standard';
+    }
+
+    update(dt) {
+        this.thinkTimer += dt;
+        if (this.thinkTimer >= this.thinkInterval) {
+            this.think();
+            this.thinkTimer = 0;
+        }
+    }
+
+    think() {
+        const world = this.game.world;
+        const myUnits = world.units.filter(u => u.playerId === this.playerId);
+        const myBuildings = world.buildings.filter(b => b.playerId === this.playerId);
+        const myCastle = myBuildings.find(b => b.type === 'castle');
+        const resources = world.playerResources[this.playerId];
+
+        if (!myCastle) return;
+
+        // 1. Economic Management
+        const doodles = myUnits.filter(u => u.type === 'doodle');
+        const idleDoodles = doodles.filter(u => u.taskQueue.length === 0 && !u.target && !u.attackTarget);
+
+        idleDoodles.forEach(doodle => {
+            // Find nearest ink splat
+            const ink = world.resources
+                .filter(r => r.type === 'ink_splat' && r.amount > 0)
+                .sort((a, b) => {
+                    const distA = Math.sqrt((a.x - doodle.x)**2 + (a.y - doodle.y)**2);
+                    const distB = Math.sqrt((b.x - doodle.x)**2 + (b.y - doodle.y)**2);
+                    return distA - distB;
+                })[0];
+
+            if (ink) {
+                doodle.addTask({ type: 'harvest', target: ink });
+            }
+        });
+
+        // 2. Production Logic
+        // Train more doodles if we have few (limit 15)
+        if (doodles.length < 15 && resources.ink >= 100 && myCastle.trainingQueue.length === 0) {
+            resources.ink -= 100;
+            myCastle.trainingQueue.push('doodle');
+            if (this.playerId === this.game.config.localPlayerId) this.game.ui.updateResourceDisplay();
+        }
+
+        // 3. Infrastructure
+        const hasDojo = myBuildings.some(b => b.type === 'dojo');
+        if (!hasDojo && resources.ink >= 200 && idleDoodles.length > 0) {
+            // Build a Dojo near the castle
+            const builder = idleDoodles[0];
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 300;
+            const bx = myCastle.x + Math.cos(angle) * dist;
+            const by = myCastle.y + Math.sin(angle) * dist;
+            
+            resources.ink -= 200;
+            const dojo = new Dojo(this.game, bx, by, this.playerId, world.nextUnitId++);
+            dojo.isUnderConstruction = true;
+            dojo.constructionProgress = 0;
+            world.buildings.push(dojo);
+            builder.addTask({ type: 'build', target: dojo });
+            if (this.playerId === this.game.config.localPlayerId) this.game.ui.updateResourceDisplay();
+        }
+
+        // 4. Military Training
+        const dojo = myBuildings.find(b => b.type === 'dojo' && !b.isUnderConstruction);
+        if (dojo && resources.ink >= 150 && dojo.trainingQueue.length < 3) {
+            resources.ink -= 150;
+            dojo.trainingQueue.push('ninja');
+            if (this.playerId === this.game.config.localPlayerId) this.game.ui.updateResourceDisplay();
+        }
+
+        // 5. Combat
+        const military = myUnits.filter(u => ['ninja', 'cowboy', 'pirate'].includes(u.type));
+        if (military.length >= 5) {
+            // Find nearest enemy castle
+            const enemyCastle = world.buildings.find(b => b.type === 'castle' && b.playerId !== this.playerId);
+            if (enemyCastle) {
+                military.forEach(u => {
+                    if (!u.attackTarget && u.taskQueue.length === 0) {
+                        u.addTask({ type: 'attack', target: enemyCastle });
+                    }
+                });
+            }
+        }
     }
 }
 

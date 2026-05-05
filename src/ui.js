@@ -430,7 +430,7 @@ export class UI {
                     actionsPanel.appendChild(removerBtn);
                 }
 
-            } else if (['dojo', 'saloon', 'docks', 'sharpener', 'furnace', 'vat', 'theRip'].includes(primary.type)) {
+            } else if (['dojo', 'saloon', 'docks', 'sharpener', 'furnace', 'theRip'].includes(primary.type)) {
                 this.renderDoodleText(this.elements.unitName, `${primary.type.toUpperCase()}`);
                 this.addUpgradeButtons(primary, actionsPanel);
                 this.addTrainingButtons(primary, actionsPanel);
@@ -847,16 +847,20 @@ export class UI {
         btn.className = 'btn-menu scribble';
         btn.style.fontSize = '0.7rem';
         btn.innerHTML = `Spill Liquid<br><small>(${vat.cargo.type || 'Empty'})</small>`;
-        btn.disabled = vat.cargo.amount === 0 || vat.cargo.type !== 'coffee';
+        btn.disabled = vat.cargo.amount === 0;
         btn.onclick = () => {
             if (vat.cargo.type === 'coffee') {
                 this.game.world.createCoffeeField(vat.x, vat.y);
                 vat.cargo = { type: null, amount: 0 };
-                this.updateSelection([vat]); // Refresh
+                this.updateSelection([vat]); 
+            } else if (vat.cargo.type === 'ink') {
+                this.game.world.createInkCloud(vat.x, vat.y);
+                vat.cargo = { type: null, amount: 0 };
+                this.updateSelection([vat]);
             }
         };
         
-        btn.onmouseover = () => this.showTooltip("Spill the contents of the Vat on the ground (Coffee creates a speed aura).");
+        btn.onmouseover = () => this.showTooltip("Spill the contents of the Vat on the ground (Coffee creates a speed aura, Ink creates an evasion cloud).");
         btn.onmouseout = () => this.showTooltip(this.game.config.unitStats.vat.description);
         
         panel.appendChild(btn);

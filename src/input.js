@@ -257,7 +257,8 @@ export class Input {
         const selection = this.game.world.selection;
         if (selection.length === 1 && (selection[0].trainingQueue || selection[0].productionQueue)) {
             const building = selection[0];
-            if (building.playerId === this.game.config.localPlayerId) {
+            // Only set rally points for static structures, not mobile units like Vats
+            if (building.playerId === this.game.config.localPlayerId && building.type !== 'vat') {
                 const hover = this.getHoverTargetAt(worldX, worldY);
                 building.rallyPoint = { x: worldX, y: worldY, target: hover ? hover.data : null };
                 this.game.ui.showTooltip("Rally Point Set!");
