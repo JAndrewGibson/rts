@@ -3,8 +3,10 @@ services:
     name: doodle-rts
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --worker-class eventlet -w 1 app:app
+    startCommand: gunicorn --worker-class gevent -w 1 app:app
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.12
       - key: SECRET_KEY
         generateValue: true
       - key: REDIS_URL
