@@ -22,48 +22,68 @@ class DoodleRTS {
             mapSize: 'medium',
             startResources: 'standard',
             unitStats: {
-                ninja: { hp: 100, damage: 12, speed: 200, range: 80, cooldown: 0.8, defense: 2, description: "Fast assassin. Strong vs Pirates, weak vs Cowboys." },
-                cowboy: { hp: 110, damage: 10, speed: 170, range: 150, cooldown: 1.2, defense: 3, description: "Ranged marksman. Strong vs Ninjas, weak vs Pirates." },
-                pirate: { hp: 140, damage: 15, speed: 150, range: 60, cooldown: 1.5, defense: 5, description: "Durable tank. Strong vs Cowboys, weak vs Ninjas." },
-                doodle: { hp: 50, damage: 5, speed: 150, range: 70, cooldown: 1.0, defense: 0, capacity: 10, description: "Basic worker. Gathers Ink and builds structures." },
-                vat: { hp: 200, damage: 0, speed: 60, range: 0, cooldown: 0, defense: 10, capacity: 200, cost: 150, description: "Liquid transport. Can carry Ink or Coffee." },
-                castle: { hp: 1000, buildTime: 15, defense: 10, description: "Your command center. Produces Doodles." },
-                dojo: { hp: 500, buildTime: 30, cost: 200, description: "Training ground for Ninjas." },
-                saloon: { hp: 500, buildTime: 30, cost: 200, description: "Training ground for Cowboys." },
-                docks: { hp: 500, buildTime: 30, cost: 200, description: "Training ground for Pirates." },
-                furnace: { hp: 600, buildTime: 40, cost: 300, description: "Refines Coal into Graphite." },
-                sharpener: { hp: 600, buildTime: 40, cost: 300, description: "Hub for advanced tech and Protractors." },
-                coffeeShop: { hp: 400, buildTime: 45, cost: 400, graphiteCost: 50, auraRange: 300, description: "Provides a combat aura and fills Vats with Coffee." },
-                stickman: { hp: 35, damage: 8, speed: 230, range: 50, cooldown: 0.6, defense: 0, description: "Fast swarming unit. Split from Doodles." },
-                paperplane: { hp: 70, damage: 12, speed: 260, range: 120, cooldown: 1.0, defense: 1, isAerial: true, description: "Fragile aerial harasser. Ignores terrain." },
-                protractor: { hp: 400, damage: 45, speed: 70, range: 350, cooldown: 3.0, defense: 15, cost: 600, graphiteCost: 150, description: "Long-range siege engine. Heavy damage." },
-                piousDoodle: { hp: 80, damage: 4, speed: 160, range: 60, cooldown: 1.2, cost: 200, description: "Religious unit. Prays for office supplies at The Rip." },
-                theRip: { hp: 800, buildTime: 40, cost: 300, description: "Sacred building. Trains Pious Doodles and provides a place for prayer." }
+                ninja: { tier: 2, hp: 100, damage: 12, speed: 200, range: 80, cooldown: 0.8, defense: 2, cost: { ink: 150, redInk: 50 }, description: "Fast assassin. Strong vs Pirates, weak vs Cowboys." },
+                cowboy: { tier: 2, hp: 110, damage: 10, speed: 170, range: 150, cooldown: 1.2, defense: 3, cost: { ink: 150, redInk: 50 }, description: "Ranged marksman. Strong vs Ninjas, weak vs Pirates." },
+                pirate: { tier: 2, hp: 140, damage: 15, speed: 150, range: 60, cooldown: 1.5, defense: 5, cost: { ink: 150, redInk: 50 }, description: "Durable tank. Strong vs Cowboys, weak vs Ninjas." },
+                doodle: { tier: 1, hp: 50, damage: 5, speed: 150, range: 70, cooldown: 1.0, defense: 0, capacity: 10, cost: { ink: 50 }, description: "Basic worker. Gathers Ink and builds structures." },
+                vat: { tier: 1, hp: 200, damage: 0, speed: 60, range: 0, cooldown: 0, defense: 10, capacity: 200, cost: { ink: 150, shavings: 50 }, description: "Liquid transport. Can carry Ink or Coffee." },
+                castle: { tier: 1, hp: 1000, buildTime: 15, defense: 10, cost: { ink: 500, shavings: 200 }, description: "Your command center. Produces Doodles." },
+                dojo: { tier: 2, hp: 500, buildTime: 30, cost: { ink: 200, graphite: 50 }, description: "Training ground for Ninjas." },
+                saloon: { tier: 2, hp: 500, buildTime: 30, cost: { ink: 200, graphite: 50 }, description: "Training ground for Cowboys." },
+                docks: { tier: 2, hp: 500, buildTime: 30, cost: { ink: 200, graphite: 50 }, description: "Training ground for Pirates." },
+                furnace: { tier: 2, hp: 600, buildTime: 40, cost: { ink: 300, shavings: 150 }, description: "Refines Coal into Graphite." },
+                sharpener: { tier: 3, hp: 600, buildTime: 40, cost: { ink: 300, graphite: 100 }, description: "Hub for advanced tech." },
+                coffeeShop: { tier: 3, hp: 400, buildTime: 45, cost: { ink: 400, graphite: 150 }, auraRange: 300, description: "Provides a combat aura and fills Vats with Coffee." },
+                stickman: { tier: 1, hp: 35, damage: 8, speed: 230, range: 50, cooldown: 0.6, defense: 0, description: "Fast swarming unit. Split from Doodles." },
+                paperplane: { tier: 3, hp: 70, damage: 12, speed: 260, range: 120, cooldown: 1.0, defense: 1, isAerial: true, cost: { ink: 150, graphite: 50 }, description: "Fragile aerial harasser. Ignores terrain." },
+                protractor: { tier: 3, hp: 400, damage: 45, speed: 70, range: 350, cooldown: 3.0, defense: 15, cost: { ink: 600, graphite: 200, whiteout: 100 }, description: "Long-range siege engine. Heavy damage." },
+                piousDoodle: { tier: 3, hp: 80, damage: 4, speed: 160, range: 60, cooldown: 1.2, cost: { ink: 200, whiteout: 50 }, description: "Religious unit. Prays for office supplies at The Rip." },
+                theRip: { tier: 3, hp: 800, buildTime: 40, cost: { ink: 300, graphite: 100 }, description: "Sacred building. Trains Pious Doodles and provides a place for prayer." },
+                
+                // Tier 3 Specialization Buildings
+                draftingTable: { tier: 3, hp: 800, buildTime: 45, cost: { ink: 400, graphite: 200, whiteout: 100 }, description: "Geometricist Specialization. Trains Compass Guardians." },
+                inkReservoir: { tier: 3, hp: 800, buildTime: 45, cost: { ink: 400, graphite: 200, whiteout: 100 }, description: "Surrealist Specialization. Trains Charcoal Smudgers and Fountain Pens." },
+                correctionLab: { tier: 3, hp: 800, buildTime: 45, cost: { ink: 400, graphite: 200, whiteout: 100 }, description: "Revisionist Specialization. Trains White-out Tankers and Solvent Vats." },
+
+                // Geometricist Units
+                compassGuardian: { tier: 3, hp: 300, damage: 5, speed: 100, range: 50, cooldown: 1.5, defense: 20, cost: { ink: 300, graphite: 150, whiteout: 50 }, description: "Projects a defensive shield that blocks projectiles and Staples." },
+
+                // Surrealist Units
+                charcoalSmudger: { tier: 3, hp: 150, damage: 0, speed: 140, range: 100, cooldown: 2.0, defense: 5, cost: { ink: 250, redInk: 150, graphite: 50 }, description: "Creates persistent Smudge Clouds that damage enemies over time." },
+                fountainPen: { tier: 3, hp: 180, damage: 18, speed: 250, range: 60, cooldown: 1.0, defense: 4, cost: { ink: 200, redInk: 100, graphite: 50 }, description: "Fast cavalry. Leaves an ink trail that boosts friendly unit speed." },
+
+                // Revisionist Units
+                whiteoutTanker: { tier: 3, hp: 600, damage: 0, speed: 80, range: 120, cooldown: 1.0, defense: 15, cost: { ink: 300, graphite: 100, whiteout: 200 }, description: "Sprays Correction Fluid. Erases Tape and Staples." },
+                solventVat: { tier: 3, hp: 300, damage: 30, speed: 90, range: 80, cooldown: 2.0, defense: 10, cost: { ink: 200, graphite: 100, whiteout: 150 }, description: "Dissolves enemy buildings and Ruler Fences rapidly." }
+            },
+            techTiers: {
+                2: { name: 'Defined Inking', cost: { ink: 500, shavings: 200 }, description: "Unlocks Tier 2 units (Ninja, Cowboy, Pirate) and Graphite refinement." },
+                3: { name: 'The Masterpiece', cost: { ink: 800, graphite: 300 }, description: "Unlocks Tier 3 Specializations and advanced technology." }
             },
             upgrades: {
-                ninja_damage: { name: 'Sharp Pens', cost: 300, time: 20, type: 'ninja', stat: 'damage', bonus: 1.5, description: "Increases Ninja damage by 50%." },
-                ninja_hp: { name: 'Thick Paper', cost: 300, time: 20, type: 'ninja', stat: 'hp', bonus: 1.4, description: "Increases Ninja HP by 40%." },
-                ninja_def: { name: 'Cardboard Plate', cost: 300, time: 20, type: 'ninja', stat: 'defense', bonus: 5, description: "Adds 5 Defense to all Ninjas." },
-                cowboy_range: { name: 'Long Ink', cost: 300, time: 20, type: 'cowboy', stat: 'range', bonus: 1.3, description: "Increases Cowboy range by 30%." },
-                cowboy_speed: { name: 'Quick Sketch', cost: 300, time: 20, type: 'cowboy', stat: 'speed', bonus: 1.2, description: "Increases Cowboy speed by 20%." },
-                cowboy_def: { name: 'Leather Binder', cost: 300, time: 20, type: 'cowboy', stat: 'defense', bonus: 5, description: "Adds 5 Defense to all Cowboys." },
-                pirate_damage: { name: 'Heavy Graphite', cost: 300, time: 20, type: 'pirate', stat: 'damage', bonus: 1.4, description: "Increases Pirate damage by 40%." },
-                pirate_hp: { name: 'Rough Parchment', cost: 300, time: 20, type: 'pirate', stat: 'hp', bonus: 1.5, description: "Increases Pirate HP by 50%." },
-                pirate_def: { name: 'Plank Armor', cost: 300, time: 20, type: 'pirate', stat: 'defense', bonus: 8, description: "Adds 8 Defense to all Pirates." },
-                castle_vat: { name: 'Built-in Vat', cost: 400, time: 30, type: 'castle', stat: 'builtInVat', bonus: 1, description: "Allows the Castle to act as a liquid drop-off point." },
-                castle_furnace: { name: 'Built-in Furnace', cost: 500, time: 40, type: 'castle', stat: 'builtInFurnace', bonus: 1, description: "Allows the Castle to refine Coal into Graphite." },
-                gathering_capacity: { name: 'Deep Pockets', cost: 300, time: 20, type: 'doodle', stat: 'capacity', bonus: 10, description: "Increases Doodle and Vat capacity by 10 units." },
-                furnace_efficiency: { name: 'Hot Coals', cost: 400, time: 25, type: 'furnace', stat: 'efficiency', bonus: 1.5, description: "Workers gather Coal 50% faster and smelting is quicker." },
-                vat_expansion: { name: 'Liquid Logic', cost: 400, time: 25, type: 'vat', stat: 'expansion', bonus: 1, description: "Vats can hold 100 more units and store multiple types of liquid." },
-                oil_based_ink: { name: 'Oil-based Ink', cost: 800, graphiteCost: 200, time: 60, type: 'castle', stat: 'oilBased', bonus: 1, description: "Units are made from oil-based ink, allowing them to walk through Scotch Tape unimpeded." }
+                ninja_damage: { name: 'Sharp Pens', cost: { ink: 300 }, time: 20, type: 'ninja', stat: 'damage', bonus: 1.5, description: "Increases Ninja damage by 50%." },
+                ninja_hp: { name: 'Thick Paper', cost: { ink: 300 }, time: 20, type: 'ninja', stat: 'hp', bonus: 1.4, description: "Increases Ninja HP by 40%." },
+                ninja_def: { name: 'Cardboard Plate', cost: { ink: 300 }, time: 20, type: 'ninja', stat: 'defense', bonus: 5, description: "Adds 5 Defense to all Ninjas." },
+                cowboy_range: { name: 'Long Ink', cost: { ink: 300 }, time: 20, type: 'cowboy', stat: 'range', bonus: 1.3, description: "Increases Cowboy range by 30%." },
+                cowboy_speed: { name: 'Quick Sketch', cost: { ink: 300 }, time: 20, type: 'cowboy', stat: 'speed', bonus: 1.2, description: "Increases Cowboy speed by 20%." },
+                cowboy_def: { name: 'Leather Binder', cost: { ink: 300 }, time: 20, type: 'cowboy', stat: 'defense', bonus: 5, description: "Adds 5 Defense to all Cowboys." },
+                pirate_damage: { name: 'Heavy Graphite', cost: { ink: 300 }, time: 20, type: 'pirate', stat: 'damage', bonus: 1.4, description: "Increases Pirate damage by 40%." },
+                pirate_hp: { name: 'Rough Parchment', cost: { ink: 300 }, time: 20, type: 'pirate', stat: 'hp', bonus: 1.5, description: "Increases Pirate HP by 50%." },
+                pirate_def: { name: 'Plank Armor', cost: { ink: 300 }, time: 20, type: 'pirate', stat: 'defense', bonus: 8, description: "Adds 8 Defense to all Pirates." },
+                castle_vat: { name: 'Built-in Vat', cost: { ink: 400, shavings: 100 }, time: 30, type: 'castle', stat: 'builtInVat', bonus: 1, description: "Allows the Castle to act as a liquid drop-off point." },
+                castle_furnace: { name: 'Built-in Furnace', cost: { ink: 500, shavings: 200 }, time: 40, type: 'castle', stat: 'builtInFurnace', bonus: 1, description: "Allows the Castle to refine Coal into Graphite." },
+                gathering_capacity: { name: 'Deep Pockets', cost: { ink: 300 }, time: 20, type: 'doodle', stat: 'capacity', bonus: 10, description: "Increases Doodle and Vat capacity by 10 units." },
+                furnace_efficiency: { name: 'Hot Coals', cost: { ink: 400, graphite: 100 }, time: 25, type: 'furnace', stat: 'efficiency', bonus: 1.5, description: "Workers gather Coal 50% faster and smelting is quicker." },
+                vat_expansion: { name: 'Liquid Logic', cost: { ink: 400, shavings: 100 }, time: 25, type: 'vat', stat: 'expansion', bonus: 1, description: "Vats can hold 100 more units and store multiple types of liquid." },
+                oil_based_ink: { name: 'Oil-based Ink', cost: { ink: 800, graphite: 200 }, time: 60, type: 'castle', stat: 'oilBased', bonus: 1, description: "Units are made from oil-based ink, allowing them to walk through Scotch Tape unimpeded." }
             },
             resourceStats: {
-                ink: { description: "Pure Liquid Ink. Collected by Doodles to fund your army." },
-                shavings: { description: "Graphite Shavings. A quick source of material." },
-                eraser: { description: "Eraser Rubbing. Used for structural reinforcements." },
+                ink: { description: "Blue Ink. The basic fluid for Doodles and early production." },
+                redInk: { description: "Red Ink. A volatile fluid required for specialized combat units." },
+                graphite: { description: "Graphite. Refined from Coal. Used for heavy structures and machinery." },
+                whiteout: { description: "Correction Fluid. Found in White-out bottles. Essential for Tier 3 tech." },
+                shavings: { description: "Graphite Shavings. A quick source of material for early structures." },
                 coal: { description: "Raw Coal. Must be refined in a Furnace to produce Graphite." },
-                ink_splat: { description: "A large Ink Splat. A persistent source of Ink for your Doodles." },
-                coal_mine: { description: "A deep Coal Mine. Provides a steady supply of Coal for refinement." },
                 coffee: { description: "Fresh Coffee. Provides a speed and damage boost to nearby units." }
             }
         };
@@ -682,13 +702,9 @@ class DoodleRTS {
             // Stop the game engine if it's running
             if (this.engine) this.engine.stop();
             
-            // Show lobby page
-            this.showPage('lobby-setup');
-            
-            // Update lobby UI with existing room data
-            if (data && data.room && this.ui) {
-                this.roomData = data.room;
-                this.ui.updateLobby(data.room);
+            // Re-show the lobby with current room state
+            if (data && data.room) {
+                this.showLobby(data.room);
             }
         });
     }

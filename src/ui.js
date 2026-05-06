@@ -3,6 +3,7 @@ export class UI {
         this.game = game;
         this.elements = {
             ink: document.getElementById('res-ink'),
+            redInk: document.getElementById('res-redInk'),
             shavings: document.getElementById('res-shavings'),
             selectionPanel: document.getElementById('selection-panel'),
             activeSelection: document.getElementById('active-selection'),
@@ -13,6 +14,7 @@ export class UI {
             units: document.getElementById('res-units'),
             coal: document.getElementById('res-coal'),
             graphite: document.getElementById('res-graphite'),
+            whiteout: document.getElementById('res-whiteout'),
             coffee: document.getElementById('res-coffee'),
             tooltipArea: document.getElementById('tooltip-area'),
             tooltipText: document.getElementById('tooltip-text')
@@ -20,17 +22,21 @@ export class UI {
         
         this.resources = {
             ink: 500,
-            eraser: 100,
+            redInk: 0,
+            shavings: 100,
             coal: 0,
             graphite: 0,
+            whiteout: 0,
             coffee: 0
         };
 
         this.lastResourceValues = {
             ink: -1,
-            eraser: -1,
+            redInk: -1,
+            shavings: -1,
             coal: -1,
             graphite: -1,
+            whiteout: -1,
             coffee: -1,
             units: ''
         };
@@ -80,11 +86,8 @@ export class UI {
     }
 
     addResource(type, amount) {
-        if (type === 'ink') {
-            this.resources.ink += amount;
-        } else if (type === 'eraser') {
-            this.resources.eraser += amount;
-        } else if (this.resources[type] !== undefined) {
+        if (type === 'eraser') type = 'shavings';
+        if (this.resources[type] !== undefined) {
             this.resources[type] += amount;
         }
         this.updateResourceDisplay();
@@ -157,29 +160,39 @@ export class UI {
 
     updateResourceDisplay() {
         const ink = Math.floor(this.resources.ink);
-        const eraser = Math.floor(this.resources.eraser);
+        const redInk = Math.floor(this.resources.redInk);
+        const shavings = Math.floor(this.resources.shavings);
         const coal = Math.floor(this.resources.coal);
         const graphite = Math.floor(this.resources.graphite);
+        const whiteout = Math.floor(this.resources.whiteout);
         const coffee = Math.floor(this.resources.coffee);
 
         if (this.lastResourceValues.ink !== ink) {
             this.renderDoodleText(this.elements.ink, ink.toString());
             this.lastResourceValues.ink = ink;
         }
-        if (this.lastResourceValues.eraser !== eraser) {
-            this.renderDoodleText(this.elements.shavings, eraser.toString());
-            this.lastResourceValues.eraser = eraser;
+        if (this.lastResourceValues.redInk !== redInk) {
+            if (this.elements.redInk) this.renderDoodleText(this.elements.redInk, redInk.toString());
+            this.lastResourceValues.redInk = redInk;
+        }
+        if (this.lastResourceValues.shavings !== shavings) {
+            if (this.elements.shavings) this.renderDoodleText(this.elements.shavings, shavings.toString());
+            this.lastResourceValues.shavings = shavings;
         }
         if (this.lastResourceValues.coal !== coal) {
-            this.renderDoodleText(this.elements.coal, coal.toString());
+            if (this.elements.coal) this.renderDoodleText(this.elements.coal, coal.toString());
             this.lastResourceValues.coal = coal;
         }
         if (this.lastResourceValues.graphite !== graphite) {
-            this.renderDoodleText(this.elements.graphite, graphite.toString());
+            if (this.elements.graphite) this.renderDoodleText(this.elements.graphite, graphite.toString());
             this.lastResourceValues.graphite = graphite;
         }
+        if (this.lastResourceValues.whiteout !== whiteout) {
+            if (this.elements.whiteout) this.renderDoodleText(this.elements.whiteout, whiteout.toString());
+            this.lastResourceValues.whiteout = whiteout;
+        }
         if (this.lastResourceValues.coffee !== coffee) {
-            this.renderDoodleText(this.elements.coffee, coffee.toString());
+            if (this.elements.coffee) this.renderDoodleText(this.elements.coffee, coffee.toString());
             this.lastResourceValues.coffee = coffee;
         }
         
@@ -296,13 +309,22 @@ export class UI {
             cancelBtn.style.color = '#e74c3c';
             
             const stats = this.game.config.unitStats[primary.type];
-            const refundAmount = Math.floor(stats.cost * (1 - (primary.constructionProgress * 0.5)));
+            let refundHtml = '';
+            const refunds = {};
+            for (const [res, amount] of Object.entries(stats.cost || {})) {
+                const refundAmount = Math.floor(amount * (1 - (primary.constructionProgress * 0.5)));
+                refundHtml += `${refundAmount} ${res.toUpperCase()}, `;
+                refunds[res] = refundAmount;
+            }
+            const cleanRefundHtml = refundHtml.slice(0, -2);
             
-            cancelBtn.innerHTML = `Cancel Build<br><small>(Refund ${refundAmount} Ink)</small>`;
+            cancelBtn.innerHTML = `Cancel Build<br><small>(Refund ${cleanRefundHtml})</small>`;
             cancelBtn.onclick = () => {
-                this.addResource('ink', refundAmount);
+                for (const [res, amount] of Object.entries(refunds)) {
+                    this.addResource(res, amount);
+                }
                 primary.hp = 0; // This will trigger handleBuildingDeath
-                this.showToast(`Construction Cancelled! Refunded ${refundAmount} Ink.`);
+                this.showToast(`Construction Cancelled! Refunded ${cleanRefundHtml}.`);
                 this.updateSelection([]);
             };
             actionsPanel.appendChild(cancelBtn);
@@ -867,16 +889,25 @@ export class UI {
             btn.style.padding = '0.3rem 0.5rem';
             btn.style.margin = '2px';
             
-            let costHtml = `(${stats.cost} Ink)`;
-            if (stats.graphiteCost) costHtml += `<br>(${stats.graphiteCost} Graphite)`;
+            let costHtml = Object.entries(stats.cost || {}).map(([res, amt]) => `(${amt} ${res.toUpperCase()})`).join('<br>');
 
             btn.innerHTML = `Build ${type.toUpperCase()}<br><small>${costHtml}</small>`;
             btn.onclick = (e) => {
                 e.stopPropagation();
-                // Check graphite cost for buildings that need it
-                if (stats.graphiteCost && this.resources.graphite < stats.graphiteCost) {
-                    this.game.ui.showToast("Not enough graphite!", "error");
+                // Check tier requirement
+                const requiredTier = stats.tier || 1;
+                const pId = this.game.config.localPlayerId || 1;
+                const currentTier = this.game.world.playerTiers[pId] || 1;
+                if (currentTier < requiredTier) {
+                    this.game.ui.showToast(`Requires Tier ${requiredTier}!`, "error");
                     return;
+                }
+                // Check cost
+                for (const [res, amt] of Object.entries(stats.cost || {})) {
+                    if (this.resources[res] < amt) {
+                        this.game.ui.showToast(`Not enough ${res}!`, "error");
+                        return;
+                    }
                 }
                 
                 // Boundary check
@@ -918,16 +949,29 @@ export class UI {
             btn.style.padding = '0.3rem 0.5rem';
             btn.style.margin = '2px';
             
-            let costHtml = `(${stats.cost || 150} Ink)`;
-            if (stats.graphiteCost) costHtml += `<br>(${stats.graphiteCost} Graphite)`;
+            let costHtml = Object.entries(stats.cost || {}).map(([res, amt]) => `(${amt} ${res.toUpperCase()})`).join('<br>');
 
             btn.innerHTML = `Train ${type.toUpperCase()}<br><small>${costHtml}</small>`;
             btn.onclick = (e) => {
                 e.stopPropagation();
-                const cost = stats.cost || 150;
-                if (this.resources.ink >= cost && (!stats.graphiteCost || this.resources.graphite >= stats.graphiteCost)) {
-                    this.resources.ink -= cost;
-                    if (stats.graphiteCost) this.resources.graphite -= stats.graphiteCost;
+                // Check tier requirement
+                const requiredTier = stats.tier || 1;
+                const pId = this.game.config.localPlayerId || 1;
+                const currentTier = this.game.world.playerTiers[pId] || 1;
+                if (currentTier < requiredTier) {
+                    this.game.ui.showToast(`Requires Tier ${requiredTier}!`, "error");
+                    return;
+                }
+                // Check cost
+                let canAfford = true;
+                for (const [res, amt] of Object.entries(stats.cost || {})) {
+                    if (this.resources[res] < amt) { canAfford = false; break; }
+                }
+
+                if (canAfford) {
+                    for (const [res, amt] of Object.entries(stats.cost || {})) {
+                        this.resources[res] -= amt;
+                    }
                     this.updateResourceDisplay();
                     building.trainingQueue.push(type);
                 } else {
@@ -971,16 +1015,25 @@ export class UI {
             btn.style.margin = '2px';
             btn.disabled = inQueue;
             
-            btn.innerHTML = `${up.name}<br><small>${inQueue ? '(Queued)' : `(${up.cost} Ink)`}</small>`;
+            let costHtml = Object.entries(up.cost || {}).map(([res, amt]) => `(${amt} ${res.toUpperCase()})`).join('<br>');
+
+            btn.innerHTML = `${up.name}<br><small>${inQueue ? '(Queued)' : costHtml}</small>`;
             btn.onclick = (e) => {
                 e.stopPropagation();
-                if (this.resources.ink >= up.cost) {
-                    this.resources.ink -= up.cost;
+                let canAfford = true;
+                for (const [res, amt] of Object.entries(up.cost || {})) {
+                    if (this.resources[res] < amt) { canAfford = false; break; }
+                }
+
+                if (canAfford) {
+                    for (const [res, amt] of Object.entries(up.cost || {})) {
+                        this.resources[res] -= amt;
+                    }
                     this.updateResourceDisplay();
                     building.trainingQueue.push(id);
                     this.updateSelection(this.game.world.selection); // Refresh UI
                 } else {
-                    this.game.ui.showToast("Not enough ink!", "error");
+                    this.game.ui.showToast("Not enough resources!", "error");
                 }
             };
 

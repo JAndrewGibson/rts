@@ -36,11 +36,11 @@ class ResourceNode {
         this.game = game;
         this.x = x;
         this.y = y;
-        this.type = type; // ink, shavings, eraser, coal, ink_splat, coal_mine
-        this.radius = ['ink', 'shavings', 'eraser'].includes(type) ? 15 : 40;
-        this.amount = type === 'ink_splat' ? 2000 : (type === 'coal_mine' ? 3000 : 50);
+        this.type = type; // ink, shavings, coal, ink_splat, coal_mine, mistake, bottle, coffee_splat
+        this.radius = ['ink', 'shavings'].includes(type) ? 15 : 40;
+        this.amount = type === 'ink_splat' ? 2000 : (type === 'coal_mine' ? 3000 : (['mistake', 'bottle'].includes(type) ? 1000 : 50));
         this.maxAmount = this.amount;
-        this.isPersistent = ['ink_splat', 'coal_mine'].includes(type);
+        this.isPersistent = ['ink_splat', 'coal_mine', 'mistake', 'bottle', 'coffee_splat'].includes(type);
     }
 
     render(ctx) {
@@ -183,6 +183,8 @@ class Unit {
 
         this.cargo = { type: null, amount: 0, capacity: stats.capacity || 10 };
         this.hasCoffeeBoost = false;
+        this.hasShield = false;
+        this.hasSpeedTrail = false;
 
         this.animTimer = 0;
         this.animFrame = 0;
@@ -196,6 +198,61 @@ class Unit {
         this.isStapled = false;
         this.struggleTimer = 0;
         this.hasStapleRemover = false;
+    }
+
+    moveTowards(dt, currentSpeed, destX, destY) {
+        let dx = destX - this.x;
+        let dy = destY - this.y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 0.1;
+
+        // Desired velocity
+        let vx = (dx / dist) * currentSpeed;
+        let vy = (dy / dist) * currentSpeed;
+
+        // Steering separation
+        let sepX = 0;
+        let sepY = 0;
+        let count = 0;
+        
+        this.game.world.units.forEach(other => {
+            if (other === this || other.isDead || other.isAerial || this.isAerial) return;
+            const odx = this.x - other.x;
+            const ody = this.y - other.y;
+            const odistSq = odx * odx + ody * ody;
+            const minDist = (this.radius + other.radius) * 1.1; // Allow denser packing
+            
+            if (odistSq > 0 && odistSq < minDist * minDist) {
+                const odist = Math.sqrt(odistSq);
+                const weight = (minDist - odist) / minDist;
+                sepX += (odx / odist) * weight;
+                sepY += (ody / odist) * weight;
+                count++;
+            }
+        });
+
+        if (count > 0) {
+            // Apply separation proportional to how crowded they are
+            sepX = sepX * currentSpeed * 1.2;
+            sepY = sepY * currentSpeed * 1.2;
+            
+            // Prioritize forward movement (0.8), gently nudge with separation
+            vx = vx * 0.8 + sepX;
+            vy = vy * 0.8 + sepY;
+            
+            const finalDist = Math.sqrt(vx * vx + vy * vy) || 1;
+            // Only cap speed if it exceeds max speed, don't force minimum speed
+            if (finalDist > currentSpeed) {
+                vx = (vx / finalDist) * currentSpeed;
+                vy = (vy / finalDist) * currentSpeed;
+            }
+        }
+
+        const moveX = vx * dt;
+        const moveY = vy * dt;
+        
+        this.x += moveX;
+        this.y += moveY;
+        this.wiggle += this.wiggleSpeed * dt;
     }
 
     addTask(task) {
@@ -230,8 +287,10 @@ class Unit {
 
             let canAccept = false;
             if (resourceType === 'ink' && (b.type === 'castle' || b.hasBuiltInVat)) canAccept = true;
+            if (resourceType === 'redInk' && (b.type === 'castle' || b.type === 'dojo' || b.type === 'saloon' || b.type === 'docks' || b.hasBuiltInVat)) canAccept = true;
             if (resourceType === 'coal' && (b.type === 'furnace' || b.hasBuiltInFurnace || b.type === 'castle')) canAccept = true;
-            if (resourceType === 'coffee' && (b.hasBuiltInVat || b.type === 'castle')) canAccept = true;
+            if (resourceType === 'coffee' && (b.hasBuiltInVat || b.type === 'castle' || b.type === 'coffeeShop')) canAccept = true;
+            if (resourceType === 'whiteout' && (b.type === 'castle' || b.type === 'sharpener' || b.type === 'correctionLab' || b.type === 'draftingTable' || b.type === 'inkReservoir')) canAccept = true;
 
             if (canAccept) {
                 const dist = Math.sqrt((this.x - b.x) ** 2 + (this.y - b.y) ** 2);
@@ -247,7 +306,7 @@ class Unit {
             if (u.playerId !== pId || u.type !== 'vat' || u.isUnderConstruction) return;
             
             let canAccept = false;
-            if ((resourceType === 'ink' || resourceType === 'coffee')) {
+            if (['ink', 'redInk', 'coffee', 'whiteout'].includes(resourceType)) {
                 // Expansion allows dual storage, otherwise check current cargo
                 const capacityCheck = u.cargo.amount < u.cargo.capacity;
                 if (capacityCheck) {
@@ -315,12 +374,46 @@ class Unit {
         this.lastY = this.y;
 
         if (this.stuckTimer > 1.5) { // Stuck for 1.5 seconds
-            // Try to nudge in a random direction to get out of whatever is blocking
-            const angle = Math.random() * Math.PI * 2;
-            const nudgeDist = 20;
-            this.x += Math.cos(angle) * nudgeDist;
-            this.y += Math.sin(angle) * nudgeDist;
             
+            // Graceful arrival check
+            if (this.taskQueue.length > 0) {
+                const task = this.taskQueue[0];
+                if (task.target) {
+                    const dist = Math.sqrt((this.x - task.target.x)**2 + (this.y - task.target.y)**2);
+                    if (dist < 80) { // If close to target but stuck, assume we arrived at perimeter
+                        this.pathIndex = this.currentPath.length; // Force arrival
+                        this.stuckTimer = 0;
+                        return;
+                    }
+                }
+            } else if (this.target) {
+                const dist = Math.sqrt((this.x - this.target.x)**2 + (this.y - this.target.y)**2);
+                if (dist < 80) {
+                    this.pathIndex = this.currentPath.length; // Force arrival
+                    this.stuckTimer = 0;
+                    return;
+                }
+            }
+
+            // Find nearby stationary units and temporarily mark them as obstacles
+            const tempBlocks = [];
+            this.game.world.units.forEach(u => {
+                if (u !== this && !u.isAerial && u.state !== 'walk' && u.state !== 'attack') {
+                    const dx = u.x - this.x;
+                    const dy = u.y - this.y;
+                    if (dx*dx + dy*dy < 150*150) {
+                        const r = Math.floor(u.y / this.game.world.gridSize);
+                        const c = Math.floor(u.x / this.game.world.gridSize);
+                        if (r >= 0 && r < this.game.world.grid.length && c >= 0 && c < this.game.world.grid[0].length) {
+                            if (this.game.world.grid[r][c] === 0) {
+                                this.game.world.grid[r][c] = 1;
+                                tempBlocks.push({r, c});
+                            }
+                        }
+                    }
+                }
+            });
+
             // Force path recalculation from new position
             if (this.attackTarget) {
                 this.currentPath = this.game.world.findPath(this.x, this.y, this.attackTarget.x, this.attackTarget.y);
@@ -335,6 +428,12 @@ class Unit {
                     this.pathIndex = 0;
                 }
             }
+
+            // Restore grid
+            tempBlocks.forEach(block => {
+                this.game.world.grid[block.r][block.c] = 0;
+            });
+
             this.stuckTimer = 0;
         }
     }
@@ -445,23 +544,105 @@ class Unit {
             currentDamage *= 1.4;
         }
 
-        // Simple unit-to-unit collision avoidance
-        this.game.world.units.forEach(other => {
-            if (other === this) return;
-            const dx = this.x - other.x;
-            const dy = this.y - other.y;
-            const distSq = dx * dx + dy * dy;
-            const minDist = (this.radius + other.radius) * 0.7; // Gentle overlap for "sketchy" look
-            if (distSq < minDist * minDist) {
-                const dist = Math.sqrt(distSq) || 0.1;
-                const push = (minDist - dist) * 0.05;
-                const angle = Math.atan2(dy, dx);
-                this.x += Math.cos(angle) * push;
-                this.y += Math.sin(angle) * push;
-                other.x -= Math.cos(angle) * push;
-                other.y -= Math.sin(angle) * push;
-            }
-        });
+        if (this.hasSpeedTrail) {
+            currentSpeed *= 1.3;
+        }
+
+        // Special Unit Mechanics
+        if (this.type === 'compassGuardian') {
+            this.game.world.units.forEach(u => {
+                if (u.playerId === this.playerId && u !== this) {
+                    const dx = u.x - this.x;
+                    const dy = u.y - this.y;
+                    if (dx*dx + dy*dy < 120*120) u.hasShield = true;
+                }
+            });
+        }
+        
+        if (this.type === 'fountainPen') {
+            this.game.world.units.forEach(u => {
+                if (u.playerId === this.playerId && u !== this) {
+                    const dx = u.x - this.x;
+                    const dy = u.y - this.y;
+                    if (dx*dx + dy*dy < 80*80) u.hasSpeedTrail = true;
+                }
+            });
+        }
+
+        if (this.type === 'whiteoutTanker') {
+            this.game.world.tapeTiles.forEach(tile => {
+                if (tile.playerId !== this.playerId) {
+                    const dx = tile.x - this.x;
+                    const dy = tile.y - this.y;
+                    if (dx*dx + dy*dy < 100*100) tile.duration = 0;
+                }
+            });
+            this.game.world.units.forEach(u => {
+                if (u.playerId === this.playerId && u.isStapled) {
+                    const dx = u.x - this.x;
+                    const dy = u.y - this.y;
+                    if (dx*dx + dy*dy < 100*100) {
+                        u.isStapled = false;
+                        u.struggleTimer = 0;
+                        u.state = 'idle';
+                    }
+                }
+            });
+        }
+
+        // Unit-to-Building/Barrier Collision Avoidance
+        if (!this.isAerial) {
+            this.game.world.buildings.forEach(b => {
+                const dx = this.x - b.x;
+                const dy = this.y - b.y;
+                const halfW = b.width / 2;
+                const halfH = b.height / 2;
+                
+                // AABB-Circle collision check
+                const closestX = Math.max(b.x - halfW, Math.min(this.x, b.x + halfW));
+                const closestY = Math.max(b.y - halfH, Math.min(this.y, b.y + halfH));
+                
+                const distanceX = this.x - closestX;
+                const distanceY = this.y - closestY;
+                const distanceSq = (distanceX * distanceX) + (distanceY * distanceY);
+                
+                if (distanceSq < (this.radius * this.radius)) {
+                    const distance = Math.sqrt(distanceSq) || 0.1;
+                    const overlap = this.radius - distance;
+                    const angle = Math.atan2(distanceY, distanceX);
+                    
+                    // If we are EXACTLY at the center of the building (closestX == this.x), 
+                    // we need to push out towards the nearest edge
+                    if (distanceSq < 0.1) {
+                        if (Math.abs(dx) / halfW > Math.abs(dy) / halfH) {
+                            this.x = b.x + (dx > 0 ? halfW + this.radius : -halfW - this.radius);
+                        } else {
+                            this.y = b.y + (dy > 0 ? halfH + this.radius : -halfH - this.radius);
+                        }
+                    } else {
+                        this.x += Math.cos(angle) * overlap;
+                        this.y += Math.sin(angle) * overlap;
+                    }
+                }
+            });
+
+            this.game.world.barriers.forEach(b => {
+                const closestX = Math.max(b.x, Math.min(this.x, b.x + b.width));
+                const closestY = Math.max(b.y, Math.min(this.y, b.y + b.height));
+                
+                const distanceX = this.x - closestX;
+                const distanceY = this.y - closestY;
+                const distanceSq = (distanceX * distanceX) + (distanceY * distanceY);
+                
+                if (distanceSq < (this.radius * this.radius)) {
+                    const distance = Math.sqrt(distanceSq) || 0.1;
+                    const overlap = this.radius - distance;
+                    const angle = Math.atan2(distanceY, distanceX);
+                    this.x += Math.cos(angle) * overlap;
+                    this.y += Math.sin(angle) * overlap;
+                }
+            });
+        }
 
         // Handle Ink Cloud effects (Aura)
         this.evasion = 0;
@@ -501,23 +682,17 @@ class Unit {
                         if (wdist < 15) {
                             this.pathIndex++;
                         } else {
-                            const moveDist = currentSpeed * dt;
-                            const ratio = moveDist / wdist;
-                            this.x += wdx * Math.min(1, ratio);
-                            this.y += wdy * Math.min(1, ratio);
-                            this.wiggle += this.wiggleSpeed * dt;
+                            this.moveTowards(dt, currentSpeed, waypoint.x, waypoint.y);
                         }
                     } else {
                         // Move closer directly if no path
-                        const ratio = (currentSpeed * dt) / dist;
-                        this.x += dx * ratio;
-                        this.y += dy * ratio;
-                        this.wiggle += this.wiggleSpeed * dt;
+                        this.moveTowards(dt, currentSpeed, this.attackTarget.x, this.attackTarget.y);
                     }
                 } else if (this.timer >= this.attackCooldown) {
                     this.attack(this.attackTarget, currentDamage);
                     this.timer = 0;
-                    this.currentPath = []; // Clear path when in range
+                    // Don't clear path immediately if we are just slightly out of range due to pushing
+                    if (dist < this.attackRange * 0.8) this.currentPath = []; 
                 }
             }
         } else if (this.target) {
@@ -536,18 +711,7 @@ class Unit {
                         this.processNextTask();
                     }
                 } else {
-                    const moveDist = currentSpeed * dt;
-                    const ratio = moveDist / dist;
-
-                    // Aerial units bypass collisions
-                    if (this.isAerial) {
-                        this.x += dx * Math.min(1, ratio);
-                        this.y += dy * Math.min(1, ratio);
-                    } else {
-                        this.x += dx * Math.min(1, ratio);
-                        this.y += dy * Math.min(1, ratio);
-                    }
-                    this.wiggle += this.wiggleSpeed * dt;
+                    this.moveTowards(dt, currentSpeed, waypoint.x, waypoint.y);
                 }
             } else {
                 // Direct move if no path
@@ -559,11 +723,7 @@ class Unit {
                     this.target = null;
                     this.processNextTask();
                 } else {
-                    const moveDist = currentSpeed * dt;
-                    const ratio = moveDist / dist;
-                    this.x += dx * Math.min(1, ratio);
-                    this.y += dy * Math.min(1, ratio);
-                    this.wiggle += this.wiggleSpeed * dt;
+                    this.moveTowards(dt, currentSpeed, this.target.x, this.target.y);
                 }
             }
         } else if (this.taskQueue.length > 0) {
@@ -594,17 +754,11 @@ class Unit {
                         if (wdist < 15) {
                             this.pathIndex++;
                         } else {
-                            const ratio = (currentSpeed * dt) / wdist;
-                            this.x += wdx * Math.min(1, ratio);
-                            this.y += wdy * Math.min(1, ratio);
-                            this.wiggle += this.wiggleSpeed * dt;
+                            this.moveTowards(dt, currentSpeed, waypoint.x, waypoint.y);
                         }
                     } else {
                         // Direct move as fallback
-                        const ratio = (currentSpeed * dt) / dist;
-                        this.x += dx * Math.min(1, ratio);
-                        this.y += dy * Math.min(1, ratio);
-                        this.wiggle += this.wiggleSpeed * dt;
+                        this.moveTowards(dt, currentSpeed, target.x, target.y);
                     }
                 } else {
                     if (task.type === 'train') {
@@ -642,16 +796,10 @@ class Unit {
                         const wdist = Math.sqrt(wdx * wdx + wdy * wdy);
                         if (wdist < 15) this.pathIndex++;
                         else {
-                            const ratio = (currentSpeed * dt) / wdist;
-                            this.x += wdx * Math.min(1, ratio);
-                            this.y += wdy * Math.min(1, ratio);
-                            this.wiggle += this.wiggleSpeed * dt;
+                            this.moveTowards(dt, currentSpeed, waypoint.x, waypoint.y);
                         }
                     } else {
-                        const ratio = (currentSpeed * dt) / dist;
-                        this.x += dx * Math.min(1, ratio);
-                        this.y += dy * Math.min(1, ratio);
-                        this.wiggle += this.wiggleSpeed * dt;
+                        this.moveTowards(dt, currentSpeed, target.x, target.y);
                     }
                 } else {
                     // Harvest logic
@@ -665,7 +813,9 @@ class Unit {
                     if (toTake > 0) {
                         const resourceType = target.type === 'ink_splat' ? 'ink' : 
                                             (target.type === 'coal_mine' ? 'coal' : 
-                                            (target.type === 'coffee_splat' ? 'coffee' : null));
+                                            (target.type === 'coffee_splat' ? 'coffee' : 
+                                            (target.type === 'mistake' ? 'redInk' :
+                                            (target.type === 'bottle' ? 'whiteout' : target.type))));
 
                         if (this.cargo.amount === 0 || this.cargo.type === resourceType) {
                             this.cargo.type = resourceType;
@@ -724,19 +874,11 @@ class Unit {
                         if (wdist < 15) {
                             this.pathIndex++;
                         } else {
-                            const moveDist = currentSpeed * dt;
-                            const ratio = moveDist / wdist;
-                            this.x += wdx * Math.min(1, ratio);
-                            this.y += wdy * Math.min(1, ratio);
-                            this.wiggle += this.wiggleSpeed * dt;
+                            this.moveTowards(dt, currentSpeed, waypoint.x, waypoint.y);
                         }
                     } else {
                         // Direct move as fallback
-                        const moveDist = currentSpeed * dt;
-                        const ratio = moveDist / dist;
-                        this.x += dx * Math.min(1, ratio);
-                        this.y += dy * Math.min(1, ratio);
-                        this.wiggle += this.wiggleSpeed * dt;
+                        this.moveTowards(dt, currentSpeed, target.x, target.y);
                     }
                     this.isPraying = false;
                 } else {
@@ -769,17 +911,11 @@ class Unit {
                         if (wdist < 15) {
                             this.pathIndex++;
                         } else {
-                            const ratio = (currentSpeed * dt) / wdist;
-                            this.x += wdx * Math.min(1, ratio);
-                            this.y += wdy * Math.min(1, ratio);
-                            this.wiggle += this.wiggleSpeed * dt;
+                            this.moveTowards(dt, currentSpeed, waypoint.x, waypoint.y);
                         }
                     } else {
                         // Direct move as fallback
-                        const ratio = (currentSpeed * dt) / dist;
-                        this.x += dx * Math.min(1, ratio);
-                        this.y += dy * Math.min(1, ratio);
-                        this.wiggle += this.wiggleSpeed * dt;
+                        this.moveTowards(dt, currentSpeed, target.x, target.y);
                     }
                 } else {
                     // Deposit logic
@@ -832,9 +968,17 @@ class Unit {
             if (dist > this.attackRange * 0.7) multiplier *= 1.5; // Bonus for long range shots
         }
 
+        if (this.type === 'solventVat' && target instanceof Structure) multiplier *= 3.0;
+
         const rawDamage = (damage || this.damage) * multiplier;
-        const finalDamage = Math.max(1, rawDamage - (target.defense || 0));
+        let effectiveDefense = target.defense || 0;
+        if (target.hasShield) effectiveDefense += 15;
+        const finalDamage = Math.max(1, rawDamage - effectiveDefense);
         target.hp -= finalDamage;
+
+        if (this.type === 'charcoalSmudger' && Math.random() > 0.6) {
+            this.game.world.smudgeClouds.push(new SmudgeCloud(this.game, target.x, target.y, 8, this.playerId));
+        }
 
         // Grape Shot (Pirate Splash)
         if (this.type === 'pirate') {
@@ -903,6 +1047,14 @@ render(ctx) {
         ctx.arc(0, 0, this.radius + 8, 0, Math.PI * 2);
         ctx.stroke();
         ctx.setLineDash([]);
+    }
+    
+    if (this.hasShield) {
+        ctx.strokeStyle = 'rgba(52, 152, 219, 0.7)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius + 12, 0, Math.PI * 2);
+        ctx.stroke();
     }
  
     // Handle Construction Progress for Units
@@ -1347,7 +1499,7 @@ class Structure {
             this.rallyPoints.forEach((rp, idx) => {
                 ctx.save();
                 ctx.beginPath();
-                ctx.arc(this.game.world.worldToScreenX(rp.x) - this.x, this.game.world.worldToScreenY(rp.y) - this.y, 5, 0, Math.PI * 2);
+                ctx.arc(rp.x - this.x, rp.y - this.y, 5, 0, Math.PI * 2);
                 ctx.fillStyle = idx === 0 ? 'rgba(46, 204, 113, 0.7)' : 'rgba(46, 204, 113, 0.3)';
                 ctx.fill();
                 
@@ -1545,7 +1697,7 @@ class Vat extends Unit {
         this.constructionProgress = 0;
         this.width = 70;
         this.height = 70;
-        this.trainingQueue = null; // Vats don't train units
+        this.trainingQueue = []; // Vats can have upgrades queued
         this.productionQueue = null;
     }
 
@@ -1707,6 +1859,56 @@ class InkCloud {
     }
 }
 
+class SmudgeCloud {
+    constructor(game, x, y, duration = 8, playerId) {
+        this.game = game;
+        this.x = x;
+        this.y = y;
+        this.radius = 100;
+        this.duration = duration;
+        this.timer = 0;
+        this.playerId = playerId;
+        this.tickTimer = 0;
+    }
+
+    update(dt) {
+        this.timer += dt;
+        this.tickTimer += dt;
+        
+        if (this.tickTimer >= 0.5) {
+            this.tickTimer = 0;
+            this.game.world.units.forEach(u => {
+                if (u.playerId !== this.playerId && !u.isDead) {
+                    const dx = u.x - this.x;
+                    const dy = u.y - this.y;
+                    if (Math.sqrt(dx * dx + dy * dy) < this.radius) {
+                        u.hp -= 2;
+                    }
+                }
+            });
+        }
+        return this.timer < this.duration;
+    }
+
+    render(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.globalAlpha = 0.4 * (1 - this.timer / this.duration);
+        ctx.fillStyle = '#111111';
+        
+        ctx.beginPath();
+        for (let i = 0; i < 8; i++) {
+            const angle = (i * Math.PI * 2) / 8;
+            const px = Math.cos(angle) * this.radius * (0.8 + Math.random() * 0.4);
+            const py = Math.sin(angle) * this.radius * (0.8 + Math.random() * 0.4);
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+        }
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
 class TapeTile {
     constructor(game, x, y, duration = 60) {
         this.game = game;
@@ -1824,6 +2026,7 @@ export class World {
         this.resources = []; // Ink Blots and Eraser Piles
         this.splatters = []; // Collected from dead units
         this.inkClouds = [];
+        this.smudgeClouds = [];
         this.tapeTiles = [];
         this.selection = [];
         this.mapSize = 3000;
@@ -1926,10 +2129,12 @@ export class World {
         this.barriers = [];
         this.splatters = [];
         this.inkClouds = [];
+        this.smudgeClouds = [];
         this.tapeTiles = [];
         this.coffeeFields = [];
         
         this.playerResources = {};
+        this.playerTiers = {};
         this.aiControllers = [];
         
         const localId = this.game.config.localPlayerId || 1;
@@ -1958,11 +2163,14 @@ export class World {
             if (this.game.config.startResources === 'low') startingInk = 200;
             if (this.game.config.startResources === 'high') startingInk = 1000;
             
+            this.playerTiers[pId] = 1;
             this.playerResources[pId] = {
                 ink: startingInk,
-                eraser: 100,
+                redInk: 0,
+                shavings: 100,
                 coal: 0,
                 graphite: 0,
+                whiteout: 0,
                 coffee: 0
             };
 
@@ -2002,6 +2210,7 @@ export class World {
                 doodle.playerId = pId;
                 this.units.push(doodle);
             }
+        }
         // Spawn barriers based on map layout
         this.spawnBarriers();
 
@@ -2061,7 +2270,7 @@ export class World {
 
         // Starting Shavings (Scattered)
         for (let i = 0; i < 6; i++) {
-            spawnSafe(Math.random() > 0.5 ? 'shavings' : 'eraser', 180 + Math.random() * 80, 15);
+            spawnSafe('shavings', 180 + Math.random() * 80, 15);
         }
     }
 
@@ -2077,10 +2286,14 @@ export class World {
         if (stats && stats.cost) {
             // Refund percentage remaining
             const refundPercent = 1 - item.constructionProgress;
-            const refundAmount = Math.floor(stats.cost * refundPercent);
-            this.game.ui.resources.ink += refundAmount;
+            let refundMsg = 'Refunded ';
+            for (const [res, amount] of Object.entries(stats.cost)) {
+                const refundAmount = Math.floor(amount * refundPercent);
+                this.game.ui.resources[res] += refundAmount;
+                refundMsg += `${refundAmount} ${res.toUpperCase()}, `;
+            }
             this.game.ui.updateResourceDisplay();
-            this.game.ui.showToast(`Construction Cancelled. Refunded ${refundAmount} Ink.`);
+            this.game.ui.showToast(`Construction Cancelled. ${refundMsg.slice(0, -2)}.`);
         }
         
         // Remove from world
@@ -2165,15 +2378,18 @@ export class World {
     }
 
     spawnBarriers() {
-        const layout = this.game.config.mapSize === 'large' ? 'black_forest' : 'arena'; // For now based on size or just pick
+        const layout = this.game.config.mapSize === 'large' ? 'black_forest' : 'arena';
 
         if (layout === 'arena') {
+            const totalSlots = this.buildings.filter(b => b.type === 'castle').length;
             // Draw a square of barriers around each player's starting cluster
             this.buildings.forEach(b => {
                 if (b.type === 'castle') {
-                    const margin = 500;
                     const wallSize = 40;
-                    const side = 1000;
+                    // side should be less than the distance between players
+                    const angleStep = (Math.PI * 2 / totalSlots);
+                    const distBetweenCastles = (this.mapSize * 0.35) * angleStep;
+                    const side = Math.min(800, distBetweenCastles * 0.8);
 
                     // Top wall
                     this.barriers.push(new Barrier(this.game, b.x - side / 2, b.y - side / 2, side, wallSize));
@@ -2253,10 +2469,11 @@ export class World {
         };
 
         spawnRandom('ink_splat', 20, 800);
+        spawnRandom('mistake', 15, 900);
+        spawnRandom('bottle', 10, 1200);
         spawnRandom('coffee_splat', 8, 1100);
         spawnRandom('coal_mine', 8, 1200);
-        spawnRandom('shavings', 20, 0, 15);
-        spawnRandom('eraser', 20, 0, 15);
+        spawnRandom('shavings', 40, 0, 15);
     }
 
     adjustZoom(delta, screenX, screenY) {
@@ -2549,7 +2766,11 @@ export class World {
         this.tapeTiles = this.tapeTiles.filter(tile => tile.update(dt));
 
         // Reset coffee boosts each frame
-        this.units.forEach(u => u.hasCoffeeBoost = false);
+        this.units.forEach(u => {
+            u.hasCoffeeBoost = false;
+            u.hasShield = false;
+            u.hasSpeedTrail = false;
+        });
 
         // Update coffee fields
         this.coffeeFields = this.coffeeFields.filter(f => f.update(dt));
@@ -2575,6 +2796,7 @@ export class World {
 
         // Update Ink Clouds
         this.inkClouds = this.inkClouds.filter(c => c.update(dt));
+        this.smudgeClouds = this.smudgeClouds.filter(c => c.update(dt));
 
         // Update AI (Host only)
         if (this.game.isHost && this.game.config.gameState === 'PLAYING') {
@@ -2831,6 +3053,7 @@ export class World {
 
         // Draw Ink Clouds
         this.inkClouds.forEach(c => c.render(ctx));
+        this.smudgeClouds.forEach(c => c.render(ctx));
 
         // Draw Tape Tiles
         this.tapeTiles.forEach(t => t.render(ctx));
@@ -2867,19 +3090,6 @@ export class World {
             ctx.font = 'bold 14px Inter';
             ctx.fillText(`PLACE ${this.placementMode.toUpperCase()}`, mouse.x, mouse.y);
             ctx.restore();
-        }
-                
-                ctx.beginPath();
-                ctx.moveTo(b.x, b.y);
-                b.rallyPoints.forEach(rp => {
-                    ctx.lineTo(rp.x, rp.y);
-                    // Draw a small circle at each point
-                    ctx.arc(rp.x, rp.y, 5, 0, Math.PI * 2);
-                    ctx.moveTo(rp.x, rp.y);
-                });
-                ctx.stroke();
-                ctx.restore();
-            }
         }
 
         ctx.restore();
