@@ -29,7 +29,7 @@ export class Input {
             
             if (e.button === 0) { // Left click
                 if (this.game.world.placementMode) {
-                    this.game.world.placeBuilding(x, y);
+                    this.game.world.placeBuilding(x, y, e.shiftKey);
                     return;
                 }
                 this.mouse.isDown = true;
@@ -81,15 +81,12 @@ export class Input {
             }
         });
 
-        window.addEventListener('wheel', (e) => {
-            if (this.game.config.gameState !== 'PLAYING') {
-                console.log('Zoom ignored - State:', this.game.config.gameState);
-                return;
-            }
+        canvas.addEventListener('wheel', (e) => {
+            if (this.game.config.gameState !== 'PLAYING') return;
+            
             e.preventDefault();
             const rect = canvas.getBoundingClientRect();
             const zoomSpeed = 0.005;
-            console.log('Zooming - Delta:', e.deltaY);
             this.game.world.adjustZoom(-e.deltaY * zoomSpeed, e.clientX - rect.left, e.clientY - rect.top);
         }, { passive: false });
 
@@ -108,6 +105,18 @@ export class Input {
                 } else if (!e.altKey && !e.metaKey && !e.shiftKey) {
                     // Just the number key
                     this.selectSquad(num);
+                }
+            }
+
+            // Handle Pause (Escape)
+            if (e.code === 'Escape') {
+                if (this.game.config.gameState === 'PLAYING') {
+                    e.preventDefault();
+                    if (this.game.engine.isPaused) {
+                        this.game.socket.emit('manual_resume', { code: this.game.roomCode });
+                    } else {
+                        this.game.socket.emit('manual_pause', { code: this.game.roomCode });
+                    }
                 }
             }
 
@@ -253,15 +262,29 @@ export class Input {
     }
 
     handleRightClick(worldX, worldY, shift) {
+        // Cancel placement mode if active
+        if (this.game.world.placementMode) {
+            this.game.world.placementMode = null;
+            this.game.ui.showToast("Placement Cancelled");
+            return;
+        }
+
         // If a single production building is selected, set rally point
         const selection = this.game.world.selection;
-        if (selection.length === 1 && (selection[0].trainingQueue || selection[0].productionQueue)) {
+        // Check if selected building has a rally point (excluding Vats which are units)
+        if (selection.length === 1 && (selection[0].trainingQueue || selection[0].productionQueue) && selection[0].type !== 'vat') {
             const building = selection[0];
             // Only set rally points for static structures, not mobile units like Vats
             if (building.playerId === this.game.config.localPlayerId && building.type !== 'vat') {
                 const hover = this.getHoverTargetAt(worldX, worldY);
-                building.rallyPoint = { x: worldX, y: worldY, target: hover ? hover.data : null };
-                this.game.ui.showTooltip("Rally Point Set!");
+                if (shift) {
+                    if (!building.rallyPoints) building.rallyPoints = [];
+                    building.rallyPoints.push({ x: worldX, y: worldY, target: hover ? hover.data : null });
+                    this.game.ui.showToast("Rally Point Added!");
+                } else {
+                    building.rallyPoints = [{ x: worldX, y: worldY, target: hover ? hover.data : null }];
+                    this.game.ui.showToast("Rally Point Set!");
+                }
                 return;
             }
         }

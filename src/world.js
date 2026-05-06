@@ -177,6 +177,9 @@ class Unit {
         this.currentPath = [];
         this.pathIndex = 0;
         this.pathUpdateTimer = 0;
+        this.stuckTimer = 0;
+        this.lastX = x;
+        this.lastY = y;
 
         this.cargo = { type: null, amount: 0, capacity: stats.capacity || 10 };
         this.hasCoffeeBoost = false;
@@ -246,8 +249,11 @@ class Unit {
             let canAccept = false;
             if ((resourceType === 'ink' || resourceType === 'coffee')) {
                 // Expansion allows dual storage, otherwise check current cargo
-                if (u.hasVatExpansion) canAccept = true;
-                else if (u.cargo.amount === 0 || u.cargo.type === resourceType) canAccept = true;
+                const capacityCheck = u.cargo.amount < u.cargo.capacity;
+                if (capacityCheck) {
+                    if (u.hasVatExpansion) canAccept = true;
+                    else if (u.cargo.amount === 0 || u.cargo.type === resourceType) canAccept = true;
+                }
             }
 
             if (canAccept) {
@@ -264,20 +270,77 @@ class Unit {
 
     processNextTask() {
         if (this.taskQueue.length === 0) return;
-        const task = this.taskQueue.shift();
+        const task = this.taskQueue[0];
+        
         if (task.type === 'move') {
+            this.taskQueue.shift();
             this.target = { x: task.x, y: task.y };
             this.attackTarget = null;
             this.currentPath = this.game.world.findPath(this.x, this.y, task.x, task.y, this.isAerial);
             this.pathIndex = 0;
         } else if (task.type === 'attack') {
+            this.taskQueue.shift();
             this.attackTarget = task.target;
             this.target = null;
+            this.currentPath = [];
+        } else if (['harvest', 'build', 'train', 'pray', 'deposit'].includes(task.type)) {
+            // These tasks are processed in Unit.update() based on taskQueue[0]
+            // We don't shift them here because they are "ongoing"
+            this.target = null;
+            this.attackTarget = null;
             this.currentPath = [];
         }
     }
 
+    checkStuck(dt) {
+        if (!this.target && !this.attackTarget && this.taskQueue.length === 0) {
+            this.stuckTimer = 0;
+            return;
+        }
+
+        // Only check for stuck if we are supposed to be walking
+        if (this.state !== 'walk') {
+            this.stuckTimer = 0;
+            return;
+        }
+
+        const distMoved = Math.sqrt(Math.pow(this.x - this.lastX, 2) + Math.pow(this.y - this.lastY, 2));
+        if (distMoved < 0.5) { // Threshold for "not moving"
+            this.stuckTimer += dt;
+        } else {
+            this.stuckTimer = 0;
+        }
+
+        this.lastX = this.x;
+        this.lastY = this.y;
+
+        if (this.stuckTimer > 1.5) { // Stuck for 1.5 seconds
+            // Try to nudge in a random direction to get out of whatever is blocking
+            const angle = Math.random() * Math.PI * 2;
+            const nudgeDist = 20;
+            this.x += Math.cos(angle) * nudgeDist;
+            this.y += Math.sin(angle) * nudgeDist;
+            
+            // Force path recalculation from new position
+            if (this.attackTarget) {
+                this.currentPath = this.game.world.findPath(this.x, this.y, this.attackTarget.x, this.attackTarget.y);
+                this.pathIndex = 0;
+            } else if (this.target) {
+                this.currentPath = this.game.world.findPath(this.x, this.y, this.target.x, this.target.y);
+                this.pathIndex = 0;
+            } else if (this.taskQueue.length > 0) {
+                const task = this.taskQueue[0];
+                if (task.target) {
+                    this.currentPath = this.game.world.findPath(this.x, this.y, task.target.x, task.target.y, this.isAerial);
+                    this.pathIndex = 0;
+                }
+            }
+            this.stuckTimer = 0;
+        }
+    }
+
     update(dt) {
+        this.checkStuck(dt);
         this.timer += dt;
         this.animTimer += dt;
 
@@ -314,8 +377,10 @@ class Unit {
         if (this.isDead) {
             this.state = 'death';
             this.deathTimer += dt;
-            // Stop animating after death animation finishes? 
-            // Actually, keep on last frame or remove unit.
+            if (this.deathTimer > 1.5) { // 1.5s death animation/fade
+                this.shouldRemove = true;
+            }
+            return; // Don't process other logic if dead
         } else if (this.attackTarget && Math.sqrt(Math.pow(this.attackTarget.x - this.x, 2) + Math.pow(this.attackTarget.y - this.y, 2)) <= this.attackRange) {
             this.state = 'attack';
         } else if (this.currentPath.length > 0 || this.target) {
@@ -511,12 +576,36 @@ class Unit {
                 const minDist = (target.width + target.height) / 2 - 20;
 
                 if (dist > minDist) {
-                    // Move towards it
-                    const moveDist = currentSpeed * dt;
-                    const ratio = moveDist / dist;
-                    this.x += dx * Math.min(1, ratio);
-                    this.y += dy * Math.min(1, ratio);
-                    this.wiggle += this.wiggleSpeed * dt;
+                    // Update path periodically
+                    this.pathUpdateTimer += dt;
+                    if (this.pathUpdateTimer > 0.5) {
+                        this.currentPath = this.game.world.findPath(this.x, this.y, target.x, target.y, this.isAerial);
+                        this.pathIndex = 0;
+                        this.pathUpdateTimer = 0;
+                    }
+
+                    // Move along path if exists
+                    if (this.currentPath.length > 0 && this.pathIndex < this.currentPath.length) {
+                        const waypoint = this.currentPath[this.pathIndex];
+                        const wdx = waypoint.x - this.x;
+                        const wdy = waypoint.y - this.y;
+                        const wdist = Math.sqrt(wdx * wdx + wdy * wdy);
+
+                        if (wdist < 15) {
+                            this.pathIndex++;
+                        } else {
+                            const ratio = (currentSpeed * dt) / wdist;
+                            this.x += wdx * Math.min(1, ratio);
+                            this.y += wdy * Math.min(1, ratio);
+                            this.wiggle += this.wiggleSpeed * dt;
+                        }
+                    } else {
+                        // Direct move as fallback
+                        const ratio = (currentSpeed * dt) / dist;
+                        this.x += dx * Math.min(1, ratio);
+                        this.y += dy * Math.min(1, ratio);
+                        this.wiggle += this.wiggleSpeed * dt;
+                    }
                 } else {
                     if (task.type === 'train') {
                         // Enter building
@@ -617,12 +706,38 @@ class Unit {
                 const minDist = (target.width + target.height) / 2 + 50;
 
                 if (dist > minDist) {
-                    // Move towards it
-                    const moveDist = currentSpeed * dt;
-                    const ratio = moveDist / dist;
-                    this.x += dx * Math.min(1, ratio);
-                    this.y += dy * Math.min(1, ratio);
-                    this.wiggle += this.wiggleSpeed * dt;
+                    // Update path periodically
+                    this.pathUpdateTimer += dt;
+                    if (this.pathUpdateTimer > 0.5) {
+                        this.currentPath = this.game.world.findPath(this.x, this.y, target.x, target.y, this.isAerial);
+                        this.pathIndex = 0;
+                        this.pathUpdateTimer = 0;
+                    }
+
+                    // Move along path if exists
+                    if (this.currentPath.length > 0 && this.pathIndex < this.currentPath.length) {
+                        const waypoint = this.currentPath[this.pathIndex];
+                        const wdx = waypoint.x - this.x;
+                        const wdy = waypoint.y - this.y;
+                        const wdist = Math.sqrt(wdx * wdx + wdy * wdy);
+
+                        if (wdist < 15) {
+                            this.pathIndex++;
+                        } else {
+                            const moveDist = currentSpeed * dt;
+                            const ratio = moveDist / wdist;
+                            this.x += wdx * Math.min(1, ratio);
+                            this.y += wdy * Math.min(1, ratio);
+                            this.wiggle += this.wiggleSpeed * dt;
+                        }
+                    } else {
+                        // Direct move as fallback
+                        const moveDist = currentSpeed * dt;
+                        const ratio = moveDist / dist;
+                        this.x += dx * Math.min(1, ratio);
+                        this.y += dy * Math.min(1, ratio);
+                        this.wiggle += this.wiggleSpeed * dt;
+                    }
                     this.isPraying = false;
                 } else {
                     this.isPraying = true;
@@ -636,12 +751,36 @@ class Unit {
                 const minDist = (target.width ? (target.width + target.height) / 2 : target.radius) + this.radius + 10;
 
                 if (dist > minDist) {
-                    // Move towards it
-                    const moveDist = currentSpeed * dt;
-                    const ratio = moveDist / dist;
-                    this.x += dx * Math.min(1, ratio);
-                    this.y += dy * Math.min(1, ratio);
-                    this.wiggle += this.wiggleSpeed * dt;
+                    // Update path periodically
+                    this.pathUpdateTimer += dt;
+                    if (this.pathUpdateTimer > 0.5) {
+                        this.currentPath = this.game.world.findPath(this.x, this.y, target.x, target.y, this.isAerial);
+                        this.pathIndex = 0;
+                        this.pathUpdateTimer = 0;
+                    }
+
+                    // Move along path if exists
+                    if (this.currentPath.length > 0 && this.pathIndex < this.currentPath.length) {
+                        const waypoint = this.currentPath[this.pathIndex];
+                        const wdx = waypoint.x - this.x;
+                        const wdy = waypoint.y - this.y;
+                        const wdist = Math.sqrt(wdx * wdx + wdy * wdy);
+
+                        if (wdist < 15) {
+                            this.pathIndex++;
+                        } else {
+                            const ratio = (currentSpeed * dt) / wdist;
+                            this.x += wdx * Math.min(1, ratio);
+                            this.y += wdy * Math.min(1, ratio);
+                            this.wiggle += this.wiggleSpeed * dt;
+                        }
+                    } else {
+                        // Direct move as fallback
+                        const ratio = (currentSpeed * dt) / dist;
+                        this.x += dx * Math.min(1, ratio);
+                        this.y += dy * Math.min(1, ratio);
+                        this.wiggle += this.wiggleSpeed * dt;
+                    }
                 } else {
                     // Deposit logic
                     this.game.world.addPlayerResource(this.playerId, this.cargo.type, this.cargo.amount, target);
@@ -658,7 +797,7 @@ class Unit {
                     this.cargo.type = null;
                     this.taskQueue.shift(); // Finished deposit
                     if (task.resume) {
-                        this.addTask(task.resume);
+                        this.taskQueue.unshift(task.resume);
                     }
                 }
             } else {
@@ -935,7 +1074,7 @@ class Structure {
         this.animSpeed = 4; // Buildings animate slower
         this.state = 'idle';
 
-        this.rallyPoint = { x: this.x, y: this.y + 120, target: null };
+        this.rallyPoints = [{ x: this.x, y: this.y + 120, target: null }];
     }
 
     update(dt) {
@@ -1038,13 +1177,19 @@ class Structure {
         doodle.playerId = this.playerId;
         this.game.world.units.push(doodle);
 
-        // Apply rally point
-        if (this.rallyPoint) {
-            if (this.rallyPoint.target && (this.rallyPoint.target.type === 'ink_splat' || this.rallyPoint.target.type === 'coal_mine' || this.rallyPoint.target.type === 'coffee_splat')) {
-                doodle.taskQueue = [{ type: 'harvest', target: this.rallyPoint.target }];
-            } else {
-                doodle.setTarget(this.rallyPoint.x, this.rallyPoint.y);
-            }
+        // Apply rally points
+        if (this.rallyPoints && this.rallyPoints.length > 0) {
+            this.rallyPoints.forEach((rp, idx) => {
+                if (idx === 0) {
+                    if (rp.target && (rp.target.type === 'ink_splat' || rp.target.type === 'coal_mine' || rp.target.type === 'coffee_splat')) {
+                        doodle.taskQueue = [{ type: 'harvest', target: rp.target }];
+                    } else {
+                        doodle.setTarget(rp.x, rp.y);
+                    }
+                } else {
+                    doodle.addTask({ type: 'move', x: rp.x, y: rp.y });
+                }
+            });
         }
     }
 
@@ -1070,15 +1215,21 @@ class Structure {
         }
 
         this.game.world.units.push(unit);
-        console.log(`Unit trained: ${type}`);
+        this.game.ui.showToast(`Unit trained: ${type}`);
 
-        // Apply rally point
-        if (this.rallyPoint) {
-            if (this.rallyPoint.target && this.rallyPoint.target instanceof Unit && this.rallyPoint.target.playerId !== this.playerId) {
-                unit.setAttackTarget(this.rallyPoint.target);
-            } else {
-                unit.setTarget(this.rallyPoint.x, this.rallyPoint.y);
-            }
+        // Apply rally points
+        if (this.rallyPoints && this.rallyPoints.length > 0) {
+            this.rallyPoints.forEach((rp, idx) => {
+                if (idx === 0) {
+                    if (rp.target && rp.target instanceof Unit && rp.target.playerId !== this.playerId) {
+                        unit.setAttackTarget(rp.target);
+                    } else {
+                        unit.setTarget(rp.x, rp.y);
+                    }
+                } else {
+                    unit.addTask({ type: 'move', x: rp.x, y: rp.y });
+                }
+            });
         }
     }
 
@@ -1186,32 +1337,32 @@ class Structure {
             ctx.lineWidth = 2;
             ctx.strokeRect(-barW / 2, -this.height / 2 - 40, barW, 8);
             ctx.fillStyle = '#f1c40f'; // Yellow for building
-            ctx.fillRect(-barW / 2 + 1, -this.height / 2 - 39, (barW - 2) * this.constructionProgress, 6);
+            ctx.fillRect(-barW / 2 + 1, -this.height / 2 - 39, (barW - 2) * this.constructionProgress, barH - 2);
         } else {
             this.renderQueue(ctx);
         }
 
-        // Draw Rally Point if selected and belongs to local player
-        if (this.selected && this.rallyPoint && this.playerId === this.game.config.localPlayerId) {
-            ctx.save();
-            ctx.setLineDash([5, 5]);
-            ctx.strokeStyle = 'rgba(52, 152, 219, 0.6)';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.lineTo(this.rallyPoint.x - this.x, this.rallyPoint.y - this.y);
-            ctx.stroke();
-
-            // Draw flag at end
-            ctx.translate(this.rallyPoint.x - this.x, this.rallyPoint.y - this.y);
-            ctx.fillStyle = '#3498db';
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.lineTo(0, -25);
-            ctx.lineTo(20, -18);
-            ctx.lineTo(0, -12);
-            ctx.fill();
-            ctx.restore();
+        // Draw Rally Points
+        if (this.selected && this.rallyPoints && this.rallyPoints.length > 0 && this.playerId === this.game.config.localPlayerId) {
+            this.rallyPoints.forEach((rp, idx) => {
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(this.game.world.worldToScreenX(rp.x) - this.x, this.game.world.worldToScreenY(rp.y) - this.y, 5, 0, Math.PI * 2);
+                ctx.fillStyle = idx === 0 ? 'rgba(46, 204, 113, 0.7)' : 'rgba(46, 204, 113, 0.3)';
+                ctx.fill();
+                
+                // Draw line to rally point
+                ctx.beginPath();
+                ctx.setLineDash([5, 5]);
+                const startX = idx === 0 ? this.x : this.rallyPoints[idx-1].x;
+                const startY = idx === 0 ? this.y : this.rallyPoints[idx-1].y;
+                ctx.moveTo(0, 0);
+                ctx.lineTo(rp.x - this.x, rp.y - this.y);
+                ctx.strokeStyle = 'rgba(46, 204, 113, 0.5)';
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.restore();
+            });
         }
 
         ctx.restore();
@@ -1394,9 +1545,8 @@ class Vat extends Unit {
         this.constructionProgress = 0;
         this.width = 70;
         this.height = 70;
-        this.trainingQueue = [];
-        this.trainingTimer = 0;
-        this.currentTrainingTime = 5;
+        this.trainingQueue = null; // Vats don't train units
+        this.productionQueue = null;
     }
 
     getTrainingType() {
@@ -1411,14 +1561,24 @@ class Vat extends Unit {
                 u.taskQueue.length > 0 &&
                 u.taskQueue[0].type === 'build' &&
                 u.taskQueue[0].target === this
-            ).length;
+            );
 
-            if (builders > 0) {
-                const speed = 0.1 * builders;
+            // Distance check for builders
+            const activeBuilders = builders.filter(u => {
+                const dx = u.x - this.x;
+                const dy = u.y - this.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                return dist < (this.width + this.height) / 2 + 60;
+            });
+
+            if (activeBuilders.length > 0) {
+                const speed = 0.1 * activeBuilders.length;
                 this.constructionProgress += speed * dt;
                 if (this.constructionProgress >= 1.0) {
                     this.constructionProgress = 1.0;
                     this.isUnderConstruction = false;
+                    // Finish task for all builders
+                    builders.forEach(u => u.taskQueue.shift());
                 }
             }
             return;
@@ -1439,9 +1599,16 @@ class Vat extends Unit {
     }
 
     render(ctx) {
+        ctx.save();
+        // Ghost look if under construction
+        if (this.isUnderConstruction) {
+            ctx.globalAlpha = 0.4 + Math.sin(Date.now() / 200) * 0.1;
+        }
+
         super.render(ctx);
+
         // Draw liquid inside if any
-        if (this.cargo.amount > 0) {
+        if (this.cargo.amount > 0 && !this.isUnderConstruction) {
             ctx.save();
             ctx.translate(this.x, this.y);
             ctx.fillStyle = this.cargo.type === 'coffee' ? '#6f4e37' : '#2c3e50';
@@ -1451,6 +1618,21 @@ class Vat extends Unit {
             ctx.fill();
             ctx.restore();
         }
+
+        // Draw construction progress bar
+        if (this.isUnderConstruction) {
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            const barW = 50;
+            const barH = 6;
+            ctx.strokeStyle = '#2c3e50';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(-barW / 2, -55, barW, barH);
+            ctx.fillStyle = '#f1c40f'; // Yellow for building
+            ctx.fillRect(-barW / 2 + 1, -54, (barW - 2) * this.constructionProgress, barH - 2);
+            ctx.restore();
+        }
+        ctx.restore();
     }
 }
 
@@ -1627,7 +1809,7 @@ class TheRip extends Structure {
             unit.taskQueue = [{ type: 'pray', target: this }];
             unit.isPraying = true;
             
-            console.log("Pious Doodle spawned and started praying!");
+            this.game.ui.showToast("Pious Doodle spawned and started praying!");
         } else {
             super.finishTraining(type);
         }
@@ -1664,17 +1846,6 @@ export class World {
         this.assets.cowboy.src = 'cowboy.png';
         this.assets.pirate.src = 'pirate.webp';
 
-        this.customPacks = { 'default': {} };
-        this.customAssets = {}; // { assetId: [HTMLImageElement] }
-        this.loadCustomPacks();
-
-        this.barriers = [];
-        this.buildings = [];
-        this.playerUpgrades = {}; // { playerId: { upgradeId: true } }
-        this.coffeeFields = [];
-        this.gridSize = 60; // Size of each pathfinding node
-        this.grid = []; // Collision grid
-
         this.playerPalettes = {
             1: { primary: '#e74c3c', secondary: '#c0392b', tertiary: '#962d22' }, // Red
             2: { primary: '#3498db', secondary: '#2980b9', tertiary: '#1c5a85' }, // Blue
@@ -1685,6 +1856,17 @@ export class World {
             7: { primary: '#ff9ff3', secondary: '#f368e0', tertiary: '#ff3f34' }, // Pink
             8: { primary: '#00d2d3', secondary: '#01a3a4', tertiary: '#006266' }  // Cyan
         };
+
+        this.customPacks = { 'default': {} };
+        this.customAssets = {}; // { assetId: [HTMLImageElement] }
+        this.loadCustomPacks();
+
+        this.barriers = [];
+        this.buildings = [];
+        this.playerUpgrades = {}; // { playerId: { upgradeId: true } }
+        this.coffeeFields = [];
+        this.gridSize = 60; // Size of each pathfinding node
+        this.grid = []; // Collision grid
 
         this.init();
     }
@@ -1725,7 +1907,7 @@ export class World {
             u.hasVatExpansion = true;
         });
 
-        console.log(`Upgrade complete: ${upgrade.name} for player ${playerId}`);
+        this.game.ui.showToast(`Upgrade complete: ${upgrade.name}`);
     }
 
     applyConfig(config, room) {
@@ -1820,77 +2002,102 @@ export class World {
                 doodle.playerId = pId;
                 this.units.push(doodle);
             }
-            // Spawn starting resources for each player (AOE style)
-            this.spawnStartingResources(cx, cy, pId);
+        // Spawn barriers based on map layout
+        this.spawnBarriers();
+
+        // Spawn starting resources for each player (AOE style)
+        for (let i = 0; i < totalSlots; i++) {
+            const slot = slots ? slots[i] : { type: (i < totalSlots ? 'player' : 'open') };
+            if (slot.type !== 'player' && slot.type !== 'computer') continue;
+            
+            const pId = i + 1;
+            const b = this.buildings.find(b => b.type === 'castle' && b.playerId === pId);
+            if (b) this.spawnStartingResources(b.x, b.y, pId);
         }
 
         // Spawn remaining resources distributed across the map
         this.spawnResources();
-
-        // Spawn barriers based on map layout
-        this.spawnBarriers();
 
         // Initialize pathfinding grid
         this.updateGrid();
     }
 
     spawnStartingResources(cx, cy, playerId) {
-        // Primary Ink Cluster (Reliable)
-        for (let i = 0; i < 4; i++) {
-            const angle = (i / 4) * Math.PI * 2 + Math.random();
-            const dist = 120 + Math.random() * 40;
-            this.resources.push(new ResourceNode(
-                this.game,
-                cx + Math.cos(angle) * dist,
-                cy + Math.sin(angle) * dist,
-                'ink_splat'
-            ));
-        }
+        const checkBlocked = (x, y, r) => {
+            return this.barriers.some(b => 
+                x + r > b.x && x - r < b.x + b.width && 
+                y + r > b.y && y - r < b.y + b.height
+            ) || this.buildings.some(b => 
+                Math.abs(x - b.x) < b.width/2 + r && Math.abs(y - b.y) < b.height/2 + r
+            );
+        };
+
+        const spawnSafe = (type, dist, radius = 40) => {
+            let attempts = 0;
+            while (attempts < 50) {
+                const angle = Math.random() * Math.PI * 2;
+                const rx = cx + Math.cos(angle) * dist;
+                const ry = cy + Math.sin(angle) * dist;
+                
+                if (rx > radius && rx < this.mapSize - radius && ry > radius && ry < this.mapSize - radius) {
+                    if (!checkBlocked(rx, ry, radius)) {
+                        this.resources.push(new ResourceNode(this.game, rx, ry, type));
+                        return true;
+                    }
+                }
+                attempts++;
+            }
+            return false;
+        };
+
+        // Primary Ink Cluster
+        spawnSafe('ink_splat', 140 + Math.random() * 40);
 
         // Secondary Mineral (Coal) Cluster
-        const coalAngle = Math.random() * Math.PI * 2;
-        const coalDist = 280;
-        this.resources.push(new ResourceNode(
-            this.game,
-            cx + Math.cos(coalAngle) * coalDist,
-            cy + Math.sin(coalAngle) * coalDist,
-            'coal_mine'
-        ));
+        spawnSafe('coal_mine', 280);
 
         // Coffee Cluster
-        const coffeeAngle = Math.random() * Math.PI * 2;
-        const coffeeDist = 350;
-        this.resources.push(new ResourceNode(
-            this.game,
-            cx + Math.cos(coffeeAngle) * coffeeDist,
-            cy + Math.sin(coffeeAngle) * coffeeDist,
-            'coffee_splat'
-        ));
+        spawnSafe('coffee_splat', 350);
 
         // Starting Shavings (Scattered)
         for (let i = 0; i < 6; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const dist = 180 + Math.random() * 80;
-            this.resources.push(new ResourceNode(
-                this.game,
-                cx + Math.cos(angle) * dist,
-                cy + Math.sin(angle) * dist,
-                Math.random() > 0.5 ? 'shavings' : 'eraser'
-            ));
+            spawnSafe(Math.random() > 0.5 ? 'shavings' : 'eraser', 180 + Math.random() * 80, 15);
         }
     }
 
     startPlacement(type) {
         this.placementMode = type;
-        console.log("Placement Mode:", type);
+        this.game.ui.showToast(`Placement Mode: ${type.toUpperCase()}`);
     }
 
-    placeBuilding(worldX, worldY) {
+    cancelConstruction(item) {
+        if (!item || !item.isUnderConstruction) return;
+        
+        const stats = this.game.config.unitStats[item.type];
+        if (stats && stats.cost) {
+            // Refund percentage remaining
+            const refundPercent = 1 - item.constructionProgress;
+            const refundAmount = Math.floor(stats.cost * refundPercent);
+            this.game.ui.resources.ink += refundAmount;
+            this.game.ui.updateResourceDisplay();
+            this.game.ui.showToast(`Construction Cancelled. Refunded ${refundAmount} Ink.`);
+        }
+        
+        // Remove from world
+        this.units = this.units.filter(u => u !== item);
+        this.buildings = this.buildings.filter(b => b !== item);
+        
+        this.updateGrid();
+        this.selection = this.selection.filter(s => s !== item);
+        this.game.ui.updateSelection(this.selection);
+    }
+
+    placeBuilding(worldX, worldY, shift = false) {
         if (!this.placementMode) return;
 
         // Boundary check
         if (worldX < 0 || worldX > this.mapSize || worldY < 0 || worldY > this.mapSize) {
-            console.log("Cannot build outside the paper!");
+            this.game.ui.showToast("Cannot build outside the paper!", "error");
             return;
         }
 
@@ -1898,13 +2105,13 @@ export class World {
         const r = Math.floor(worldY / this.gridSize);
         const c = Math.floor(worldX / this.gridSize);
         if (this.grid[r] && this.grid[r][c] === 1) {
-            console.log("Cannot build here - area blocked!");
+            this.game.ui.showToast("Cannot build here - area blocked!", "error");
             return;
         }
 
         const stats = this.game.config.unitStats[this.placementMode];
         if (this.game.ui.resources.ink < stats.cost) {
-            console.log("Not enough ink!");
+            this.game.ui.showToast("Not enough ink!", "error");
             this.placementMode = null;
             return;
         }
@@ -1929,9 +2136,6 @@ export class World {
             if (this.placementMode === 'vat') {
                 b.playerId = p;
                 this.units.push(b);
-                // Vats start with 0 progress but we might want them to be built by doodles?
-                // The user said "built near ink splats", so we'll treat them as structures that become units.
-                // For simplicity, let's make them a unit that starts "under construction".
                 b.isUnderConstruction = true;
                 b.constructionProgress = 0;
                 b.width = 70; b.height = 70; // For construction logic
@@ -1945,14 +2149,19 @@ export class World {
             // Auto-assign selected doodles to build
             this.selection.forEach(unit => {
                 if (unit.type === 'doodle') {
-                    unit.taskQueue = [{ type: 'build', target: b }];
-                    unit.target = null;
-                    unit.attackTarget = null;
+                    if (shift) {
+                        unit.addTask({ type: 'build', target: b });
+                    } else {
+                        unit.taskQueue = [{ type: 'build', target: b }];
+                        unit.target = null;
+                        unit.attackTarget = null;
+                        unit.currentPath = [];
+                    }
                 }
             });
         }
 
-        this.placementMode = null;
+        if (!shift) this.placementMode = null;
     }
 
     spawnBarriers() {
@@ -2017,45 +2226,37 @@ export class World {
     }
 
     spawnResources() {
-        // Spawn Random Ink Splats (Persistent) - Far from bases
-        for (let i = 0; i < 12; i++) {
-            const rx = Math.random() * this.mapSize;
-            const ry = Math.random() * this.mapSize;
-            const nearPlayer = this.buildings.some(b => Math.sqrt((b.x - rx) ** 2 + (b.y - ry) ** 2) < 1000);
-            if (nearPlayer) continue;
+        const checkBlocked = (x, y, r) => {
+            return this.barriers.some(b => 
+                x + r > b.x && x - r < b.x + b.width && 
+                y + r > b.y && y - r < b.y + b.height
+            ) || this.buildings.some(b => 
+                Math.abs(x - b.x) < b.width/2 + r && Math.abs(y - b.y) < b.height/2 + r
+            );
+        };
 
-            this.resources.push(new ResourceNode(this.game, rx, ry, 'ink_splat'));
-        }
+        const spawnRandom = (type, count, minDistFromPlayer, radius = 40) => {
+            for (let i = 0; i < count; i++) {
+                let attempts = 0;
+                while (attempts < 50) {
+                    const rx = radius + Math.random() * (this.mapSize - radius * 2);
+                    const ry = radius + Math.random() * (this.mapSize - radius * 2);
+                    
+                    const nearPlayer = this.buildings.some(b => Math.sqrt((b.x - rx) ** 2 + (b.y - ry) ** 2) < minDistFromPlayer);
+                    if (!nearPlayer && !checkBlocked(rx, ry, radius)) {
+                        this.resources.push(new ResourceNode(this.game, rx, ry, type));
+                        break;
+                    }
+                    attempts++;
+                }
+            }
+        };
 
-        // Spawn Random Coffee Splats
-        for (let i = 0; i < 8; i++) {
-            const rx = Math.random() * this.mapSize;
-            const ry = Math.random() * this.mapSize;
-            const nearPlayer = this.buildings.some(b => Math.sqrt((b.x - rx) ** 2 + (b.y - ry) ** 2) < 1100);
-            if (nearPlayer) continue;
-
-            this.resources.push(new ResourceNode(this.game, rx, ry, 'coffee_splat'));
-        }
-
-        // Spawn Random Coal Mines (Persistent)
-        for (let i = 0; i < 8; i++) {
-            const rx = Math.random() * this.mapSize;
-            const ry = Math.random() * this.mapSize;
-            const nearPlayer = this.buildings.some(b => Math.sqrt((b.x - rx) ** 2 + (b.y - ry) ** 2) < 1200);
-            if (nearPlayer) continue;
-
-            this.resources.push(new ResourceNode(this.game, rx, ry, 'coal_mine'));
-        }
-
-        // Spawn Random Pickups
-        for (let i = 0; i < 40; i++) {
-            this.resources.push(new ResourceNode(
-                this.game,
-                Math.random() * this.mapSize,
-                Math.random() * this.mapSize,
-                Math.random() > 0.5 ? 'shavings' : 'eraser'
-            ));
-        }
+        spawnRandom('ink_splat', 20, 800);
+        spawnRandom('coffee_splat', 8, 1100);
+        spawnRandom('coal_mine', 8, 1200);
+        spawnRandom('shavings', 20, 0, 15);
+        spawnRandom('eraser', 20, 0, 15);
     }
 
     adjustZoom(delta, screenX, screenY) {
@@ -2183,6 +2384,10 @@ export class World {
 
             console.log("Custom Art Packs processed for all players.");
 
+            // Re-render font with debouncing
+            let fontLoadCount = 0;
+            const totalFontChars = Object.keys(pack).filter(k => k.startsWith('game_font_')).length;
+
             // Check for font characters
             Object.keys(pack).forEach(key => {
                 if (key.startsWith('game_font_')) {
@@ -2193,15 +2398,31 @@ export class World {
                         const img = new Image();
                         img.onload = () => {
                             const canvas = this.trimImageWhitespace(img);
-                            // Cache as an image with pre-rendered data URL to save UI cycles
-                            const fontImg = new Image();
-                            fontImg.src = canvas.toDataURL();
-                            this.customFont[char] = fontImg;
+                            if (canvas) {
+                                // Cache as an image with pre-rendered data URL to save UI cycles
+                                const fontImg = new Image();
+                                fontImg.src = canvas.toDataURL();
+                                this.customFont[char] = fontImg;
+                            } else {
+                                // Explicitly remove if it was there before but now empty
+                                delete this.customFont[char];
+                            }
 
-                            // Refresh UI once fonts are processed
-                            if (this.game.ui) this.game.ui.refreshGlobalFont();
+                            fontLoadCount++;
+                            // Only refresh UI once ALL characters are processed or after a timeout
+                            if (fontLoadCount === totalFontChars && this.game.ui) {
+                                this.game.ui.refreshGlobalFont();
+                            }
+                        };
+                        img.onerror = () => {
+                            fontLoadCount++;
+                            if (fontLoadCount === totalFontChars && this.game.ui) {
+                                this.game.ui.refreshGlobalFont();
+                            }
                         };
                         img.src = frames[0];
+                    } else {
+                        fontLoadCount++;
                     }
                 }
             });
@@ -2238,7 +2459,7 @@ export class World {
             }
         }
 
-        if (!hasPixels) return img; // Empty frame
+        if (!hasPixels) return null; // Empty frame
 
         // Create the cropped canvas
         const cropWidth = (maxX - minX) + 1;
@@ -2337,13 +2558,17 @@ export class World {
             unit.update(dt);
 
             // Check for resource collection or splatter collection
-            this.checkCollections(unit);
+            if (!unit.isDead) this.checkCollections(unit);
 
-            // Handle unit "deletion" or death
-            if (unit.hp <= 0) {
-                this.handleUnitDeath(unit, index, unit.deadWithoutSplatter);
+            // Handle unit death
+            if (unit.hp <= 0 && !unit.isDead) {
+                unit.isDead = true;
+                this.handleUnitDeath(unit);
             }
         });
+
+        // Remove dead units after animation
+        this.units = this.units.filter(u => !u.shouldRemove);
 
         // Update splatters (maybe they fade or animate slightly)
         this.splatters.forEach(s => s.update(dt));
@@ -2355,6 +2580,9 @@ export class World {
         if (this.game.isHost && this.game.config.gameState === 'PLAYING') {
             this.aiControllers.forEach(ai => ai.update(dt));
         }
+
+        // Clean up depleted persistent resources
+        this.resources = this.resources.filter(res => !res.isPersistent || res.amount > 0);
 
         if (this.game.config.gameState !== 'PLAYING') return;
 
@@ -2409,9 +2637,22 @@ export class World {
             data.units.forEach(remoteUnit => {
                 let unit = this.units.find(u => u.id === remoteUnit.id);
                 if (!unit) {
-                    unit = new Unit(this.game, remoteUnit.x, remoteUnit.y, remoteUnit.type, remoteUnit.id);
-                    unit.playerId = remoteUnit.playerId;
-                    this.units.push(unit);
+                    const { x, y, type, id, playerId } = remoteUnit;
+                    if (type === 'doodle') unit = new Doodle(this.game, x, y, id);
+                    else if (type === 'ninja') unit = new Ninja(this.game, x, y, id);
+                    else if (type === 'cowboy') unit = new Cowboy(this.game, x, y, id);
+                    else if (type === 'pirate') unit = new Pirate(this.game, x, y, id);
+                    else if (type === 'stickman') unit = new Stickman(this.game, x, y, id);
+                    else if (type === 'paperplane') unit = new PaperPlane(this.game, x, y, id);
+                    else if (type === 'protractor') unit = new Protractor(this.game, x, y, id);
+                    else if (type === 'piousDoodle') unit = new PiousDoodle(this.game, x, y, id);
+                    else if (type === 'vat') unit = new Vat(this.game, x, y, id);
+                    else unit = new Unit(this.game, x, y, type, id);
+
+                    if (unit) {
+                        unit.playerId = playerId;
+                        this.units.push(unit);
+                    }
                 } else if (unit.playerId !== this.game.config.localPlayerId) {
                     unit.x = remoteUnit.x;
                     unit.y = remoteUnit.y;
@@ -2482,34 +2723,36 @@ export class World {
                 this.game.ui.addResource(res.type, res.amount);
                 this.resources.splice(rIndex, 1);
 
-                // Respawn later or spawn elsewhere?
+                // Respawn later or spawn elsewhere (checking for barriers)
                 setTimeout(() => {
-                    this.resources.push(new ResourceNode(
-                        this.game,
-                        Math.random() * this.mapSize,
-                        Math.random() * this.mapSize,
-                        res.type
-                    ));
+                    let attempts = 0;
+                    while (attempts < 50) {
+                        const rx = Math.random() * this.mapSize;
+                        const ry = Math.random() * this.mapSize;
+                        const isBlocked = this.barriers.some(b => 
+                            rx + res.radius > b.x && rx - res.radius < b.x + b.width && 
+                            ry + res.radius > b.y && ry - res.radius < b.y + b.height
+                        );
+                        if (!isBlocked) {
+                            this.resources.push(new ResourceNode(this.game, rx, ry, res.type));
+                            break;
+                        }
+                        attempts++;
+                    }
                 }, 5000);
             }
         });
     }
 
-    handleUnitDeath(unit, index, skipSplatter = false) {
+    handleUnitDeath(unit, skipSplatter = false) {
         // Create splatter effect
-        if (!skipSplatter) {
+        if (!skipSplatter && !unit.deadWithoutSplatter) {
             this.splatters.push(new Splatter(this.game, unit.x, unit.y, 50));
         }
 
-        // Remove from world
-        this.units.splice(index, 1);
-
-        // Remove from selection if it was selected
+        // Remove from selection immediately
         this.selection = this.selection.filter(u => u !== unit);
         this.game.ui.updateSelection(this.selection);
-
-        // If all units are dead and it's a computer player, maybe they lost?
-        // But usually RTS depends on Buildings (Castle).
     }
 
     handleBuildingDeath(building, index) {
@@ -2624,6 +2867,19 @@ export class World {
             ctx.font = 'bold 14px Inter';
             ctx.fillText(`PLACE ${this.placementMode.toUpperCase()}`, mouse.x, mouse.y);
             ctx.restore();
+        }
+                
+                ctx.beginPath();
+                ctx.moveTo(b.x, b.y);
+                b.rallyPoints.forEach(rp => {
+                    ctx.lineTo(rp.x, rp.y);
+                    // Draw a small circle at each point
+                    ctx.arc(rp.x, rp.y, 5, 0, Math.PI * 2);
+                    ctx.moveTo(rp.x, rp.y);
+                });
+                ctx.stroke();
+                ctx.restore();
+            }
         }
 
         ctx.restore();
@@ -2740,7 +2996,7 @@ export class World {
 
         // Boundary check
         if (worldX < 0 || worldX > this.mapSize || worldY < 0 || worldY > this.mapSize) {
-            console.log("Cannot command outside the paper!");
+            this.game.ui.showToast("Cannot command outside the paper!", "error");
             return;
         }
 
@@ -2760,11 +3016,13 @@ export class World {
 
         if (resource) {
             this.selection.forEach(unit => {
-                if (unit.type === 'doodle') {
+                const isLiquid = resource.type === 'ink_splat' || resource.type === 'coffee_splat';
+                if (unit.type === 'doodle' || (unit.type === 'vat' && isLiquid)) {
                     if (shift) unit.addTask({ type: 'harvest', target: resource });
                     else {
                         unit.taskQueue = [{ type: 'harvest', target: resource }];
                         unit.target = null;
+                        unit.currentPath = [];
                     }
                 }
             });
@@ -2773,25 +3031,26 @@ export class World {
 
         if (building && building.playerId === this.game.config.localPlayerId) {
             this.selection.forEach(unit => {
-                if (unit.type === 'doodle') {
-                    // Check if unit can deposit here
-                    if (unit.cargo.amount > 0) {
-                        let canAccept = false;
-                        if (unit.cargo.type === 'ink' && (building.type === 'castle' || building.hasBuiltInVat)) canAccept = true;
-                        if (unit.cargo.type === 'coal' && (building.type === 'furnace' || building.hasBuiltInFurnace || building.type === 'castle')) canAccept = true;
-                        if (unit.cargo.type === 'coffee' && (building.hasBuiltInVat || building.type === 'castle')) canAccept = true;
+                // Both Doodles and Vats can deposit cargo
+                if ((unit.type === 'doodle' || unit.type === 'vat') && unit.cargo.amount > 0) {
+                    let canAccept = false;
+                    if (unit.cargo.type === 'ink' && (building.type === 'castle' || building.hasBuiltInVat)) canAccept = true;
+                    if (unit.cargo.type === 'coal' && (building.type === 'furnace' || building.hasBuiltInFurnace || building.type === 'castle')) canAccept = true;
+                    if (unit.cargo.type === 'coffee' && (building.hasBuiltInVat || building.type === 'castle')) canAccept = true;
 
-                        if (canAccept) {
-                            if (shift) unit.addTask({ type: 'deposit', target: building });
-                            else {
-                                unit.taskQueue = [{ type: 'deposit', target: building }];
-                                unit.target = null;
-                                unit.currentPath = [];
-                            }
-                            return;
+                    if (canAccept) {
+                        if (shift) unit.addTask({ type: 'deposit', target: building });
+                        else {
+                            unit.taskQueue = [{ type: 'deposit', target: building }];
+                            unit.target = null;
+                            unit.currentPath = [];
                         }
+                        return; // Done with this unit for this command
                     }
+                }
 
+                // Only Doodles can build and train
+                if (unit.type === 'doodle') {
                     if (building.isUnderConstruction) {
                         if (shift) unit.addTask({ type: 'build', target: building });
                         else {
@@ -2820,23 +3079,24 @@ export class World {
             return Math.sqrt(dx * dx + dy * dy) < u.radius + 15;
         });
 
-        if (friendly && friendly.type === 'vat') {
+        if (friendly && friendly.type === 'vat' && !this.selection.includes(friendly)) {
             this.selection.forEach(unit => {
-                if (unit.type === 'doodle') {
-                    if (friendly.isUnderConstruction) {
+                if (friendly.isUnderConstruction) {
+                    if (unit.type === 'doodle') {
                         if (shift) unit.addTask({ type: 'build', target: friendly });
                         else {
                             unit.taskQueue = [{ type: 'build', target: friendly }];
                             unit.target = null;
                             unit.currentPath = [];
                         }
-                    } else if (unit.cargo.amount > 0) {
-                        if (shift) unit.addTask({ type: 'deposit', target: friendly });
-                        else {
-                            unit.taskQueue = [{ type: 'deposit', target: friendly }];
-                            unit.target = null;
-                            unit.currentPath = [];
-                        }
+                    }
+                } else if (unit.cargo.amount > 0) {
+                    // Both Doodles and Vats can deposit into a Vat (Vats can consolidate)
+                    if (shift) unit.addTask({ type: 'deposit', target: friendly });
+                    else {
+                        unit.taskQueue = [{ type: 'deposit', target: friendly }];
+                        unit.target = null;
+                        unit.currentPath = [];
                     }
                 }
             });
@@ -2875,8 +3135,10 @@ export class World {
             this.selection.forEach((unit, index) => {
                 const spacing = 60;
                 const offset = (index - (this.selection.length - 1) / 2) * spacing;
-                let tx = worldX + px * offset;
-                let ty = worldY + py * offset;
+                // Add a bit of "doodle jitter" to the formation so they aren't perfectly aligned
+                const jitter = 15;
+                let tx = worldX + px * offset + (Math.random() * jitter - jitter/2);
+                let ty = worldY + py * offset + (Math.random() * jitter - jitter/2);
 
                 // Validate target point (avoid barriers)
                 const tr = Math.floor(ty / this.gridSize);
@@ -2907,7 +3169,7 @@ export class World {
             const queuedUnits = castle.productionQueue.length;
 
             if (currentUnits + queuedUnits >= maxUnits) {
-                console.log("Unit cap reached!");
+                this.game.ui.showToast("Unit cap reached!", "error");
                 return;
             }
 
@@ -2918,9 +3180,9 @@ export class World {
             if (castle.productionQueue.length === 1) {
                 castle.startProduction('doodle');
             }
-            console.log("Queued Simple Doodle at castle");
+            this.game.ui.showToast("Queued Simple Doodle at castle");
         } else {
-            console.log("Not enough ink!");
+            this.game.ui.showToast("Not enough ink!", "error");
         }
     }
 
@@ -3000,9 +3262,14 @@ export class World {
         fScore.set(nodeKey(startNode), this.heuristic(startNode, endNode));
 
         while (openSet.length > 0) {
-            // Sort by fScore
-            openSet.sort((a, b) => fScore.get(nodeKey(a)) - fScore.get(nodeKey(b)));
-            const current = openSet.shift();
+            // Find node with lowest fScore (O(n) instead of O(n log n) sort)
+            let minIndex = 0;
+            for (let i = 1; i < openSet.length; i++) {
+                if ((fScore.get(nodeKey(openSet[i])) ?? Infinity) < (fScore.get(nodeKey(openSet[minIndex])) ?? Infinity)) {
+                    minIndex = i;
+                }
+            }
+            const current = openSet.splice(minIndex, 1)[0];
 
             if (current.r === endNode.r && current.c === endNode.c) {
                 return this.reconstructPath(cameFrom, current, endX, endY);

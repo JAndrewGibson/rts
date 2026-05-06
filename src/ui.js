@@ -90,13 +90,65 @@ export class UI {
         this.updateResourceDisplay();
     }
 
+    showToast(message, type = 'info') {
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+
+        const toast = document.createElement('div');
+        toast.className = 'scribble toast';
+        toast.style.background = type === 'error' ? '#e74c3c' : 'var(--text-color)';
+        toast.style.color = 'white';
+        toast.style.padding = '10px 20px';
+        toast.style.borderRadius = '8px';
+        toast.style.boxShadow = '4px 4px 0px rgba(0,0,0,0.2)';
+        toast.style.marginBottom = '10px';
+        toast.style.pointerEvents = 'auto';
+        toast.style.transition = 'all 0.3s ease';
+        toast.style.fontSize = '1rem';
+        toast.style.border = '2px solid white';
+        
+        this.renderDoodleText(toast, message);
+        container.appendChild(toast);
+
+        // Fade in
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-20px)';
+        requestAnimationFrame(() => {
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateY(0)';
+        });
+
+        // Remove after delay
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'scale(0.8) translateY(-20px)';
+            setTimeout(() => toast.remove(), 300);
+        }, 4000);
+    }
+
     update(dt) {
         this.updateResourceDisplay();
         this.updateSquads();
         
-        // Update training progress if a building is selected
+        // Update selection details dynamically
         if (this.game.world && this.game.world.selection.length === 1) {
             const primary = this.game.world.selection[0];
+            
+            // Refresh HP bar
+            if (this.elements.unitHp) {
+                this.elements.unitHp.style.width = `${(primary.hp / primary.maxHp) * 100}%`;
+            }
+
+            // Refresh Cargo Info if it exists
+            const cargoInfo = document.getElementById('unit-cargo-info');
+            if (cargoInfo && primary.cargo) {
+                const text = `Cargo: ${Math.floor(primary.cargo.amount)}/${primary.cargo.capacity} ${primary.cargo.type || ''}`;
+                if (cargoInfo.innerHTML !== text) {
+                    cargoInfo.innerHTML = text;
+                }
+            }
+
+            // Update training progress
             if (primary.trainingQueue || primary.productionQueue) {
                 this.updateTrainingInfo(primary);
             }
@@ -233,7 +285,29 @@ export class UI {
 
     updateSelection(selection) {
         const actionsPanel = document.getElementById('actions-panel');
-        if (actionsPanel) actionsPanel.innerHTML = '';
+        actionsPanel.innerHTML = '';
+
+        // Cancel Construction Button
+        if (selection.length === 1 && selection[0].isUnderConstruction && selection[0].playerId === this.game.config.localPlayerId) {
+            const primary = selection[0];
+            const cancelBtn = document.createElement('button');
+            cancelBtn.className = 'btn-menu scribble';
+            cancelBtn.style.borderColor = '#e74c3c';
+            cancelBtn.style.color = '#e74c3c';
+            
+            const stats = this.game.config.unitStats[primary.type];
+            const refundAmount = Math.floor(stats.cost * (1 - (primary.constructionProgress * 0.5)));
+            
+            cancelBtn.innerHTML = `Cancel Build<br><small>(Refund ${refundAmount} Ink)</small>`;
+            cancelBtn.onclick = () => {
+                this.addResource('ink', refundAmount);
+                primary.hp = 0; // This will trigger handleBuildingDeath
+                this.showToast(`Construction Cancelled! Refunded ${refundAmount} Ink.`);
+                this.updateSelection([]);
+            };
+            actionsPanel.appendChild(cancelBtn);
+        }
+
         this.showTooltip(''); // Clear tooltip on selection change
 
         if (selection.length === 1) {
@@ -290,6 +364,7 @@ export class UI {
                 
                 // Show cargo info
                 const cargoInfo = document.createElement('div');
+                cargoInfo.id = 'unit-cargo-info';
                 cargoInfo.className = 'scribble';
                 cargoInfo.style.fontSize = '0.8rem';
                 cargoInfo.style.marginBottom = '5px';
@@ -439,7 +514,46 @@ export class UI {
                 this.addCoffeeShopButtons(primary, actionsPanel);
             } else if (primary.type === 'vat') {
                 this.renderDoodleText(this.elements.unitName, "COLLECTION VAT");
-                this.addVatButtons(primary, actionsPanel);
+                
+                // Show cargo info
+                const cargoInfo = document.createElement('div');
+                cargoInfo.id = 'unit-cargo-info';
+                cargoInfo.className = 'scribble';
+                cargoInfo.style.fontSize = '0.8rem';
+                cargoInfo.style.marginBottom = '5px';
+                cargoInfo.innerHTML = `Cargo: ${Math.floor(primary.cargo.amount)}/${primary.cargo.capacity} ${primary.cargo.type || ''}`;
+                actionsPanel.appendChild(cargoInfo);
+
+                // Add drop off button
+                if (primary.cargo.amount > 0) {
+                    const dropBtn = document.createElement('button');
+                    dropBtn.className = 'btn-menu scribble';
+                    dropBtn.innerHTML = `Empty Vat<br><small>(${Math.floor(primary.cargo.amount)} ${primary.cargo.type || ''})</small>`;
+                    dropBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        const dropOff = primary.findNearestDropPoint(primary.cargo.type);
+                        if (dropOff) {
+                            primary.taskQueue = [{ type: 'deposit', target: dropOff }];
+                            primary.target = null;
+                            primary.currentPath = [];
+                        }
+                    };
+                    actionsPanel.appendChild(dropBtn);
+
+                    // Spill Liquid (from old addVatButtons)
+                    if (primary.cargo.type === 'coffee') {
+                        const spillBtn = document.createElement('button');
+                        spillBtn.className = 'btn-menu scribble';
+                        spillBtn.innerHTML = `Spill Coffee<br><small>(Create Aura)</small>`;
+                        spillBtn.onclick = () => {
+                            this.game.world.createCoffeeField(primary.x, primary.y);
+                            primary.cargo = { type: null, amount: 0 };
+                            this.updateSelection([primary]);
+                        };
+                        spillBtn.onmouseover = () => this.showTooltip("Spill the coffee to create a temporary speed and damage aura on the ground.");
+                        actionsPanel.appendChild(spillBtn);
+                    }
+                }
             } else {
                 this.renderDoodleText(this.elements.unitName, `${primary.type} #${primary.id}`);
             }
@@ -500,10 +614,105 @@ export class UI {
                 totalMaxHp += u.maxHp;
             });
 
-            // If only doodles are selected, show build buttons
+            // Multi-selection actions - Show buttons for ALL present types
             const types = Object.keys(counts);
-            if (types.length === 1 && types[0] === 'doodle') {
-                this.addBuildButtons(actionsPanel);
+            const shownActions = new Set();
+            
+            types.forEach(type => {
+                if (type === 'doodle' && !shownActions.has('doodle')) {
+                    this.addBuildButtons(actionsPanel);
+                    
+                    // Group Swarm
+                    const swarmBtn = document.createElement('button');
+                    swarmBtn.className = 'btn-menu scribble';
+                    swarmBtn.innerHTML = `Swarm Group<br><small>(Doodles)</small>`;
+                    swarmBtn.onclick = () => {
+                        selection.filter(u => u.type === 'doodle').forEach(u => {
+                            this.game.world.spawnSwarm(u.x, u.y, u.playerId);
+                            u.hp = 0;
+                        });
+                        this.updateSelection(selection.filter(u => u.hp > 0));
+                    };
+                    actionsPanel.appendChild(swarmBtn);
+
+                    // Group Drop Off
+                    const hasCargo = selection.some(u => u.cargo && u.cargo.amount > 0);
+                    if (hasCargo) {
+                        const dropBtn = document.createElement('button');
+                        dropBtn.className = 'btn-menu scribble';
+                        dropBtn.innerHTML = `Drop Off All<br><small>(Workers)</small>`;
+                        dropBtn.onclick = (e) => {
+                            e.stopPropagation();
+                            selection.forEach(u => {
+                                if (u.cargo && u.cargo.amount > 0) {
+                                    const dropOff = u.findNearestDropPoint(u.cargo.type);
+                                    if (dropOff) {
+                                        if (u.taskQueue.length > 0) {
+                                            const currentTask = u.taskQueue.shift();
+                                            u.taskQueue.unshift({ type: 'deposit', target: dropOff, resume: currentTask });
+                                        } else {
+                                            u.taskQueue.push({ type: 'deposit', target: dropOff });
+                                        }
+                                        u.target = null;
+                                        u.currentPath = [];
+                                    }
+                                }
+                            });
+                        };
+                        actionsPanel.appendChild(dropBtn);
+                    }
+                    shownActions.add('doodle');
+                } else if (type === 'ninja' && !shownActions.has('ninja')) {
+                    const specialBtn = document.createElement('button');
+                    specialBtn.className = 'btn-menu scribble';
+                    specialBtn.innerHTML = `Ink Cloud<br><small>(Ninjas)</small>`;
+                    specialBtn.onclick = () => {
+                        selection.filter(u => u.type === 'ninja').forEach(u => this.game.world.createInkCloud(u.x, u.y));
+                    };
+                    actionsPanel.appendChild(specialBtn);
+                    shownActions.add('ninja');
+                } else if (type === 'vat' && !shownActions.has('vat')) {
+                    const hasCoffee = selection.some(u => u.type === 'vat' && u.cargo && u.cargo.type === 'coffee' && u.cargo.amount > 0);
+                    if (hasCoffee) {
+                        const spillBtn = document.createElement('button');
+                        spillBtn.className = 'btn-menu scribble';
+                        spillBtn.innerHTML = `Spill Coffee<br><small>(Vats)</small>`;
+                        spillBtn.onclick = () => {
+                            selection.filter(u => u.type === 'vat' && u.cargo && u.cargo.type === 'coffee' && u.cargo.amount > 0).forEach(u => {
+                                this.game.world.createCoffeeField(u.x, u.y);
+                                u.cargo = { type: null, amount: 0 };
+                            });
+                            this.updateSelection(selection);
+                        };
+                        actionsPanel.appendChild(spillBtn);
+                    }
+                    shownActions.add('vat');
+                } else if (this.game.config.unitStats[type] && (this.game.config.unitStats[type].trainingQueue || this.game.config.unitStats[type].productionQueue || selection.find(u => u.type === type && (u.trainingQueue || u.productionQueue))) && !shownActions.has(type)) {
+                    // For buildings like Castle, Dojo, etc.
+                    const building = selection.find(u => u.type === type);
+                    if (building) {
+                        if (type === 'castle') this.addCastleButtons(actionsPanel, building);
+                        else if (type === 'dojo') this.addTrainingButtons(actionsPanel, building, 'ninja');
+                        else if (type === 'saloon') this.addTrainingButtons(actionsPanel, building, 'cowboy');
+                        else if (type === 'docks') this.addTrainingButtons(actionsPanel, building, 'pirate');
+                        else if (type === 'theRip') this.addTrainingButtons(actionsPanel, building, 'piousDoodle');
+                    }
+                    shownActions.add(type);
+                }
+            });
+
+            // Check if any selected item is under construction
+            const anyUnderConstruction = selection.some(u => u.isUnderConstruction);
+            if (anyUnderConstruction) {
+                const cancelAllBtn = document.createElement('button');
+                cancelAllBtn.className = 'btn-menu scribble btn-danger';
+                cancelAllBtn.innerHTML = 'Cancel All Builds';
+                cancelAllBtn.onclick = () => {
+                    [...selection].forEach(u => {
+                        if (u.isUnderConstruction) this.game.world.cancelConstruction(u);
+                    });
+                };
+                actionsPanel.appendChild(cancelAllBtn);
             }
             
             // Clear name and replace with icons
@@ -666,9 +875,13 @@ export class UI {
                 e.stopPropagation();
                 // Check graphite cost for buildings that need it
                 if (stats.graphiteCost && this.resources.graphite < stats.graphiteCost) {
-                    console.log("Not enough graphite!");
+                    this.game.ui.showToast("Not enough graphite!", "error");
                     return;
                 }
+                
+                // Boundary check
+                if (this.game.world.placementMode) return;
+                
                 this.game.world.startPlacement(type);
             };
             
@@ -717,6 +930,8 @@ export class UI {
                     if (stats.graphiteCost) this.resources.graphite -= stats.graphiteCost;
                     this.updateResourceDisplay();
                     building.trainingQueue.push(type);
+                } else {
+                    this.game.ui.showToast("Not enough resources!", "error");
                 }
             };
 
@@ -764,6 +979,8 @@ export class UI {
                     this.updateResourceDisplay();
                     building.trainingQueue.push(id);
                     this.updateSelection(this.game.world.selection); // Refresh UI
+                } else {
+                    this.game.ui.showToast("Not enough ink!", "error");
                 }
             };
 
@@ -830,9 +1047,9 @@ export class UI {
             );
             if (vats.length > 0) {
                 vats[0].cargo = { type: 'coffee', amount: 100 };
-                console.log("Vat filled with coffee!");
+                this.game.ui.showToast("Vat filled with coffee!");
             } else {
-                console.log("No empty vats nearby!");
+                this.game.ui.showToast("No empty vats nearby!", "error");
             }
         };
         

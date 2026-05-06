@@ -118,6 +118,55 @@ def handle_focus_changed(data):
             if all_focused:
                 emit('game_resumed', room=code)
 
+@socketio.on('manual_pause')
+def handle_manual_pause(data):
+    sid = request.sid
+    code = data.get('code')
+    if code in ROOMS and sid in ROOMS[code]['players']:
+        emit('manual_game_paused', {'playerName': ROOMS[code]['players'][sid]['name']}, room=code)
+
+@socketio.on('manual_resume')
+def handle_manual_resume(data):
+    sid = request.sid
+    code = data.get('code')
+    if code in ROOMS and sid in ROOMS[code]['players']:
+        # For simplicity, anyone can resume if it was a manual pause
+        emit('manual_game_resumed', room=code)
+
+@socketio.on('resign')
+def handle_resign(data):
+    sid = request.sid
+    code = data.get('code')
+    if code in ROOMS and sid in ROOMS[code]['players']:
+        player_name = ROOMS[code]['players'][sid]['name']
+        emit('player_forfeited', {'playerName': player_name}, room=code)
+        # Optional: Actually mark them as dead in the game state if tracked on server
+
+@socketio.on('quit_game')
+def handle_quit_game(data):
+    sid = request.sid
+    code = data.get('code')
+    if code in ROOMS and ROOMS[code]['host'] == sid:
+        emit('game_quit', room=code)
+        # Room will be deleted when everyone disconnects or we can delete it now
+        if code in ROOMS:
+            del ROOMS[code]
+
+@socketio.on('request_rematch')
+def handle_rematch(data):
+    sid = request.sid
+    code = data.get('code')
+    if code in ROOMS:
+        # Only host or anyone? User said "a rematch button" which implies anyone could trigger it, 
+        # but usually host manages the lobby. Let's allow anyone in the room to trigger it for now, 
+        # or restrict to host if preferred. The user didn't specify.
+        ROOMS[code]['status'] = 'lobby'
+        # Reset ready status of all players
+        for p_sid in ROOMS[code]['players']:
+            ROOMS[code]['players'][p_sid]['ready'] = False
+        
+        emit('return_to_lobby', {'room': ROOMS[code]}, room=code)
+
 
 @socketio.on('create_room')
 def handle_create_room(data):

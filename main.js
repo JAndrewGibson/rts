@@ -80,8 +80,12 @@ class DoodleRTS {
     }
 
     init() {
+        this.checkScreenSize();
         this.resize();
-        window.addEventListener('resize', () => this.resize());
+        window.addEventListener('resize', () => {
+            this.resize();
+            this.checkScreenSize();
+        });
 
         try {
             // Initialize modules
@@ -257,12 +261,68 @@ class DoodleRTS {
                 }
             };
         });
+
+        // Manual Pause Menu buttons
+        const resumeBtn = document.getElementById('btn-pause-resume');
+        if (resumeBtn) {
+            resumeBtn.onclick = () => {
+                this.socket.emit('manual_resume', { code: this.roomCode });
+            };
+        }
+
+        const resignBtn = document.getElementById('btn-pause-resign');
+        if (resignBtn) {
+            resignBtn.onclick = () => {
+                if (confirm("Are you sure you want to resign?")) {
+                    this.socket.emit('resign', { code: this.roomCode });
+                    this.togglePauseMenu(false);
+                    // Redirect or show defeat? Resign usually means defeat.
+                    this.ui.showDefeat();
+                }
+            };
+        }
+
+        const quitBtn = document.getElementById('btn-pause-quit');
+        if (quitBtn) {
+            quitBtn.onclick = () => {
+                if (confirm("Are you sure you want to quit the game for everyone?")) {
+                    this.socket.emit('quit_game', { code: this.roomCode });
+                }
+            };
+        }
+
+        // Rematch buttons
+        ['victory', 'defeat', 'forfeit'].forEach(type => {
+            const btn = document.getElementById(`btn-${type}-rematch`);
+            if (btn) {
+                btn.onclick = () => {
+                    this.socket.emit('request_rematch', { code: this.roomCode });
+                };
+            }
+        });
     }
 
     showPage(pageId) {
         document.querySelectorAll('.menu-overlay').forEach(p => p.style.display = 'none');
         const target = document.getElementById(pageId);
         if (target) target.style.display = 'flex';
+        
+        // Ensure desktop warning stays on top if visible
+        this.checkScreenSize();
+    }
+
+    checkScreenSize() {
+        const warning = document.getElementById('desktop-warning');
+        if (!warning) return;
+        
+        if (window.innerWidth < 1024) {
+            warning.style.display = 'flex';
+        } else {
+            // Only hide if it's currently showing
+            if (warning.style.display === 'flex') {
+                warning.style.display = 'none';
+            }
+        }
     }
 
     renderWiki(pageId) {
@@ -498,6 +558,15 @@ class DoodleRTS {
         `;
     }
 
+    checkScreenSize() {
+        const warning = document.getElementById('desktop-warning');
+        if (window.innerWidth < 1024) {
+            warning.style.display = 'flex';
+        } else {
+            warning.style.display = 'none';
+        }
+    }
+
     populateBalanceGrid(grid) {
         grid.innerHTML = '';
         for (const [type, stats] of Object.entries(this.config.unitStats)) {
@@ -593,6 +662,34 @@ class DoodleRTS {
 
         this.socket.on('player_forfeited', (data) => {
             if (this.ui) this.ui.showForfeitMessage(data.playerName);
+        });
+
+        this.socket.on('manual_game_paused', (data) => {
+            if (this.engine) this.engine.isPaused = true;
+            this.togglePauseMenu(true);
+        });
+
+        this.socket.on('manual_game_resumed', () => {
+            if (this.engine) this.engine.isPaused = false;
+            this.togglePauseMenu(false);
+        });
+
+        this.socket.on('game_quit', () => {
+            window.location.reload();
+        });
+
+        this.socket.on('return_to_lobby', (data) => {
+            // Stop the game engine if it's running
+            if (this.engine) this.engine.stop();
+            
+            // Show lobby page
+            this.showPage('lobby-setup');
+            
+            // Update lobby UI with existing room data
+            if (data && data.room && this.ui) {
+                this.roomData = data.room;
+                this.ui.updateLobby(data.room);
+            }
         });
     }
 
@@ -746,6 +843,26 @@ class DoodleRTS {
         if (this.world) {
             this.world.applyConfig(this.config, room);
             // Assign starting positions based on pId
+        }
+    }
+
+    togglePauseMenu(show) {
+        const menu = document.getElementById('pause-menu');
+        if (!menu) return;
+
+        if (show === undefined) {
+            show = menu.style.display === 'none';
+        }
+
+        menu.style.display = show ? 'flex' : 'none';
+        
+        if (show) {
+            // Update quit button visibility for host
+            const quitBtn = document.getElementById('btn-pause-quit');
+            if (quitBtn) {
+                quitBtn.style.display = this.isHost ? 'block' : 'none';
+            }
+            if (this.ui) this.ui.processNodeForFont(menu);
         }
     }
 

@@ -148,6 +148,15 @@ export class Illustrator {
 
         document.getElementById('tool-weight').oninput = (e) => this.atrament.weight = parseFloat(e.target.value);
 
+        // Scroll wheel for brush weight
+        this.canvas.onwheel = (e) => {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? -1 : 1;
+            const newWeight = Math.min(20, Math.max(1, this.atrament.weight + delta));
+            this.atrament.weight = newWeight;
+            document.getElementById('tool-weight').value = newWeight;
+        };
+
         // Animation Settings
         document.getElementById('preview-speed').oninput = (e) => {
             const valSpan = document.getElementById('preview-speed-val');
@@ -216,7 +225,7 @@ export class Illustrator {
 
             categories[catName].forEach(asset => {
                 const item = document.createElement('div');
-                item.className = `asset-item scribble ${asset.id === this.currentAsset ? 'active' : ''}`;
+                item.className = `asset-item ${asset.id === this.currentAsset ? 'active' : ''}`;
                 item.textContent = asset.name;
                 item.onclick = () => this.selectAsset(asset.id);
                 list.appendChild(item);
@@ -234,7 +243,7 @@ export class Illustrator {
 
         asset.actions.forEach(action => {
             const item = document.createElement('div');
-            item.className = `asset-item scribble ${action === this.currentAction ? 'active' : ''}`;
+            item.className = `asset-item ${action === this.currentAction ? 'active' : ''}`;
             item.style.padding = '5px 10px';
             item.style.fontSize = '0.8rem';
             item.textContent = action;
