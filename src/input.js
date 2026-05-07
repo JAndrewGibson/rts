@@ -6,7 +6,7 @@ export class Input {
             y: 0,
             isDown: false,
             dragStart: null,
-            rightClick: false,
+            button: 0,
             isPanning: false,
             panStart: null
         };
@@ -33,13 +33,16 @@ export class Input {
                     return;
                 }
                 this.mouse.isDown = true;
+                this.mouse.button = 0;
                 this.mouse.dragStart = { x: e.clientX, y: e.clientY };
             } else if (e.button === 1) { // Middle click (Pan)
                 this.mouse.isPanning = true;
                 this.mouse.panStart = { x: e.clientX, y: e.clientY };
                 e.preventDefault();
-            } else if (e.button === 2) { // Right click
-                this.handleRightClick(x, y, e.shiftKey);
+            } else if (e.button === 2) { // Right click (Move / Attack Area / Targeting Area)
+                this.mouse.isDown = true;
+                this.mouse.button = 2;
+                this.mouse.dragStart = { x: e.clientX, y: e.clientY };
             }
         });
 
@@ -68,16 +71,40 @@ export class Input {
                 this.mouse.dragStart = null;
                 return;
             }
+
+            const rect = canvas.getBoundingClientRect();
+            const worldStart = this.mouse.dragStart ? this.getMouseWorldPos(this.mouse.dragStart.x - rect.left, this.mouse.dragStart.y - rect.top) : null;
+            const worldEnd = this.getMouseWorldPos(e.clientX - rect.left, e.clientY - rect.top);
+            const dist = this.mouse.dragStart ? Math.sqrt(Math.pow(e.clientX - this.mouse.dragStart.x, 2) + Math.pow(e.clientY - this.mouse.dragStart.y, 2)) : 0;
+
             if (e.button === 0) {
                 if (this.mouse.dragStart) {
                     const multi = e.shiftKey || e.ctrlKey;
-                    this.handleSelection(this.mouse.dragStart, { x: e.clientX, y: e.clientY }, multi);
+                    if (dist < 5) {
+                        this.game.world.selectAt(worldEnd.x, worldEnd.y, multi);
+                    } else {
+                        this.game.world.selectInBox(worldStart, worldEnd, multi);
+                    }
                 }
                 this.mouse.isDown = false;
                 this.mouse.dragStart = null;
             } else if (e.button === 1) {
                 this.mouse.isPanning = false;
                 this.mouse.panStart = null;
+            } else if (e.button === 2) {
+                if (this.mouse.dragStart) {
+                    if (dist > 5) {
+                        if (e.ctrlKey) {
+                            this.game.world.assignAttackArea(worldStart, worldEnd);
+                        } else {
+                            this.game.world.commandTargetArea(worldStart, worldEnd);
+                        }
+                    } else {
+                        this.handleRightClick(worldEnd.x, worldEnd.y, e.shiftKey);
+                    }
+                }
+                this.mouse.isDown = false;
+                this.mouse.dragStart = null;
             }
         });
 
@@ -376,14 +403,23 @@ export class Input {
     render(ctx) {
         // Draw selection box
         if (this.mouse.isDown && this.mouse.dragStart) {
-            ctx.strokeStyle = '#00f2ff';
+            let color = '#00f2ff'; // Default blue (Selection)
+            if (this.mouse.button === 2) {
+                if (this.keys['ControlLeft'] || this.keys['ControlRight']) {
+                    color = '#f1c40f'; // Yellow (Attack Area)
+                } else {
+                    color = '#e74c3c'; // Red (Targeting Area)
+                }
+            }
+
+            ctx.strokeStyle = color;
             ctx.lineWidth = 1;
             ctx.setLineDash([5, 5]);
             const width = this.mouse.x - this.mouse.dragStart.x;
             const height = this.mouse.y - this.mouse.dragStart.y;
             ctx.strokeRect(this.mouse.dragStart.x, this.mouse.dragStart.y, width, height);
             
-            ctx.fillStyle = 'rgba(0, 242, 255, 0.1)';
+            ctx.fillStyle = `${color}22`; // 22 is hex for ~13% alpha
             ctx.fillRect(this.mouse.dragStart.x, this.mouse.dragStart.y, width, height);
             ctx.setLineDash([]);
         }

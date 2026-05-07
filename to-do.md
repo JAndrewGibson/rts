@@ -1,21 +1,17 @@
-Add more maps
+Targeting buildings isn't working well... My units don't seem to be able to target an enemy dojo or castle or anything else.
 
-Scroll wheel should adjust brush weight when on the illistrator
+Troop formation right now is a straight line - there need to be controllable options for troop layout. Grid and flank at the least.
 
-Vats are still unable to be moved on their own. Make sure vats are able to be moved, I believe it's being overwritten by the gather point - but vats don't create units, so they don't need a gather point.
+Toast notifications for in-game actions need to be only for the user, right now they are shown for all players, so if one player runs out of ink, all players see it. These should only be shown for the player that the action is relevant to.
 
-The game only really works when it's running on desktop. If the user resizes the screen to be too small there should be a prompt telling the user to make their screen larger or to play on a desktop.
+Also, toast notifications should be on the top left and much smaller, right now they overlay on the middle of the screen, especially when there re a lot of them.
 
 When multiple of the same unit are selected - the options for their actions should still show.
-
-Only one ink splat should spawn inside the walls near the player. Also, make sure that no elements spawn outside the game barrient or inside of any boundries.
 
 Doodles should be able to build multiple strucutres, one after the other if a buiolding is being build and then shift-clicked to build a second building.
 
 Likewise, a doodle should be able to be given multiple resources to harvest - one after the other - only going to the second one when the first one is completely depleted.
 
 Multiple gather points should be able to be set, one after the other.
-
-Players need feedback on why a building isn't placed, the "Not enough ink", shouldn't be a console command - it needs to be a toast-like notification.
 
 Players need a way to cancel the construction of a building. Both before they place it, and while it's being built. Destroying a half-built building gets back the percentage of the resources relative to how much was built.

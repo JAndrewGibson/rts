@@ -94,42 +94,55 @@ export class UI {
     }
 
     showToast(message, type = 'info') {
-        const container = document.getElementById('toast-container');
-        if (!container) return;
+        let container = document.getElementById('toast-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'toast-container';
+            container.style.position = 'fixed';
+            container.style.top = '20px';
+            container.style.left = '20px';
+            container.style.display = 'flex';
+            container.style.flexDirection = 'column';
+            container.style.zIndex = '10000';
+            container.style.pointerEvents = 'none';
+            document.body.appendChild(container);
+        }
 
         const toast = document.createElement('div');
         toast.className = 'scribble toast';
-        toast.style.background = type === 'error' ? '#e74c3c' : 'var(--text-color)';
+        toast.style.background = type === 'error' ? '#e74c3c' : 'rgba(44, 62, 80, 0.9)';
         toast.style.color = 'white';
-        toast.style.padding = '10px 20px';
-        toast.style.borderRadius = '8px';
-        toast.style.boxShadow = '4px 4px 0px rgba(0,0,0,0.2)';
-        toast.style.marginBottom = '10px';
+        toast.style.padding = '6px 12px';
+        toast.style.borderRadius = '4px';
+        toast.style.marginBottom = '5px';
+        toast.style.boxShadow = '3px 3px 0px rgba(0,0,0,0.2)';
         toast.style.pointerEvents = 'auto';
         toast.style.transition = 'all 0.3s ease';
-        toast.style.fontSize = '1rem';
-        toast.style.border = '2px solid white';
+        toast.style.fontSize = '0.85rem';
+        toast.style.minWidth = '180px';
+        toast.style.fontFamily = "'Inter', system-ui, sans-serif";
         
         this.renderDoodleText(toast, message);
         container.appendChild(toast);
 
         // Fade in
         toast.style.opacity = '0';
-        toast.style.transform = 'translateY(-20px)';
+        toast.style.transform = 'translateX(-20px)';
         requestAnimationFrame(() => {
             toast.style.opacity = '1';
-            toast.style.transform = 'translateY(0)';
+            toast.style.transform = 'translateX(0)';
         });
 
         // Remove after delay
         setTimeout(() => {
             toast.style.opacity = '0';
-            toast.style.transform = 'scale(0.8) translateY(-20px)';
+            toast.style.transform = 'translateX(-20px)';
             setTimeout(() => toast.remove(), 300);
-        }, 4000);
+        }, 3000);
     }
 
     update(dt) {
+        this.checkScreenSize();
         this.updateResourceDisplay();
         this.updateSquads();
         
@@ -238,6 +251,7 @@ export class UI {
 
         if (!isFontReady) {
             element.textContent = text;
+            element.style.setProperty('font-family', "'Inter', system-ui, sans-serif", 'important');
             // Headers need to be much larger on the main menu
             element.style.fontSize = (element.tagName === 'H1') ? '5rem' : '1.2em';
             element.dataset.renderedText = text;
@@ -287,6 +301,7 @@ export class UI {
             } else {
                 const span = document.createElement('span');
                 span.textContent = char;
+                span.style.setProperty('font-family', "'Inter', system-ui, sans-serif", 'important');
                 span.style.fontSize = '1.25em'; // Boost size of missing characters for readability
                 element.appendChild(span);
             }
@@ -582,7 +597,16 @@ export class UI {
 
             // Training/Production Queue display
             const queue = primary.trainingQueue || primary.productionQueue || [];
-            if (queue.length > 0) {
+            if (primary.isUnderConstruction) {
+                const cancelBtn = document.createElement('button');
+                cancelBtn.className = 'btn-menu scribble btn-danger';
+                cancelBtn.style.marginTop = '10px';
+                cancelBtn.innerHTML = 'Cancel Construction';
+                cancelBtn.onclick = () => {
+                    this.game.world.cancelConstruction(primary);
+                };
+                actionsPanel.appendChild(cancelBtn);
+            } else if (queue.length > 0) {
                 const info = document.createElement('div');
                 info.id = 'training-info';
                 info.style.width = '100%';
@@ -629,12 +653,57 @@ export class UI {
             const counts = {};
             let totalHp = 0;
             let totalMaxHp = 0;
+            let avgDmg = 0;
+            let combatUnits = 0;
             
             selection.forEach(u => {
                 counts[u.type] = (counts[u.type] || 0) + 1;
                 totalHp += u.hp;
                 totalMaxHp += u.maxHp;
+                if (u.damage) {
+                    avgDmg += u.damage;
+                    combatUnits++;
+                }
             });
+
+            // Show group stats
+            const statsDiv = document.createElement('div');
+            statsDiv.style.display = 'grid';
+            statsDiv.style.gridTemplateColumns = '1fr 1fr';
+            statsDiv.style.gap = '8px';
+            statsDiv.style.marginBottom = '10px';
+            statsDiv.style.padding = '8px';
+            statsDiv.style.background = 'rgba(0,0,0,0.05)';
+            statsDiv.style.borderRadius = '5px';
+            statsDiv.style.fontSize = '0.75rem';
+
+            const groupStats = [
+                { label: 'Units', value: selection.length },
+                { label: 'Avg HP', value: Math.round((totalHp / selection.length)) },
+                { label: 'Avg DMG', value: combatUnits > 0 ? Math.round(avgDmg / combatUnits) : 0 }
+            ];
+
+            groupStats.forEach(s => {
+                const row = document.createElement('div');
+                row.innerHTML = `<span style="opacity: 0.7">${s.label}:</span> <strong>${s.value}</strong>`;
+                statsDiv.appendChild(row);
+            });
+            actionsPanel.appendChild(statsDiv);
+
+            // Universal Group Commands
+            const stopBtn = document.createElement('button');
+            stopBtn.className = 'btn-menu scribble';
+            stopBtn.innerHTML = 'Stop All';
+            stopBtn.onclick = () => {
+                selection.forEach(u => {
+                    u.target = null;
+                    u.currentPath = [];
+                    u.taskQueue = [];
+                    u.attackTarget = null;
+                });
+                this.showToast("All units stopped");
+            };
+            actionsPanel.appendChild(stopBtn);
 
             // Multi-selection actions - Show buttons for ALL present types
             const types = Object.keys(counts);
@@ -643,46 +712,6 @@ export class UI {
             types.forEach(type => {
                 if (type === 'doodle' && !shownActions.has('doodle')) {
                     this.addBuildButtons(actionsPanel);
-                    
-                    // Group Swarm
-                    const swarmBtn = document.createElement('button');
-                    swarmBtn.className = 'btn-menu scribble';
-                    swarmBtn.innerHTML = `Swarm Group<br><small>(Doodles)</small>`;
-                    swarmBtn.onclick = () => {
-                        selection.filter(u => u.type === 'doodle').forEach(u => {
-                            this.game.world.spawnSwarm(u.x, u.y, u.playerId);
-                            u.hp = 0;
-                        });
-                        this.updateSelection(selection.filter(u => u.hp > 0));
-                    };
-                    actionsPanel.appendChild(swarmBtn);
-
-                    // Group Drop Off
-                    const hasCargo = selection.some(u => u.cargo && u.cargo.amount > 0);
-                    if (hasCargo) {
-                        const dropBtn = document.createElement('button');
-                        dropBtn.className = 'btn-menu scribble';
-                        dropBtn.innerHTML = `Drop Off All<br><small>(Workers)</small>`;
-                        dropBtn.onclick = (e) => {
-                            e.stopPropagation();
-                            selection.forEach(u => {
-                                if (u.cargo && u.cargo.amount > 0) {
-                                    const dropOff = u.findNearestDropPoint(u.cargo.type);
-                                    if (dropOff) {
-                                        if (u.taskQueue.length > 0) {
-                                            const currentTask = u.taskQueue.shift();
-                                            u.taskQueue.unshift({ type: 'deposit', target: dropOff, resume: currentTask });
-                                        } else {
-                                            u.taskQueue.push({ type: 'deposit', target: dropOff });
-                                        }
-                                        u.target = null;
-                                        u.currentPath = [];
-                                    }
-                                }
-                            });
-                        };
-                        actionsPanel.appendChild(dropBtn);
-                    }
                     shownActions.add('doodle');
                 } else if (type === 'ninja' && !shownActions.has('ninja')) {
                     const specialBtn = document.createElement('button');
@@ -709,19 +738,54 @@ export class UI {
                         actionsPanel.appendChild(spillBtn);
                     }
                     shownActions.add('vat');
-                } else if (this.game.config.unitStats[type] && (this.game.config.unitStats[type].trainingQueue || this.game.config.unitStats[type].productionQueue || selection.find(u => u.type === type && (u.trainingQueue || u.productionQueue))) && !shownActions.has(type)) {
+                } else if (this.game.config.unitStats[type] && (this.game.config.unitStats[type].trainingQueue || this.game.config.unitStats[type].productionQueue)) {
                     // For buildings like Castle, Dojo, etc.
                     const building = selection.find(u => u.type === type);
-                    if (building) {
+                    if (building && !shownActions.has(type)) {
                         if (type === 'castle') this.addCastleButtons(actionsPanel, building);
                         else if (type === 'dojo') this.addTrainingButtons(actionsPanel, building, 'ninja');
                         else if (type === 'saloon') this.addTrainingButtons(actionsPanel, building, 'cowboy');
                         else if (type === 'docks') this.addTrainingButtons(actionsPanel, building, 'pirate');
                         else if (type === 'theRip') this.addTrainingButtons(actionsPanel, building, 'piousDoodle');
+                        shownActions.add(type);
                     }
-                    shownActions.add(type);
                 }
             });
+
+            // Add Formation Buttons
+            const formations = [
+                { id: 'line', label: 'Line', icon: '📏' },
+                { id: 'grid', label: 'Grid', icon: '⬛' },
+                { id: 'flank', label: 'Flank', icon: '🛡️' }
+            ];
+
+            const formContainer = document.createElement('div');
+            formContainer.style.display = 'flex';
+            formContainer.style.gap = '5px';
+            formContainer.style.marginTop = '10px';
+            formContainer.style.paddingTop = '10px';
+            formContainer.style.borderTop = '1px solid rgba(0,0,0,0.1)';
+            formContainer.style.justifyContent = 'center';
+
+            formations.forEach(f => {
+                const fBtn = document.createElement('button');
+                fBtn.className = 'btn-menu scribble';
+                fBtn.style.padding = '4px 8px';
+                fBtn.style.fontSize = '0.75rem';
+                fBtn.style.flex = '1';
+                fBtn.innerHTML = `${f.icon}<br>${f.label}`;
+                if (this.game.world.formationType === f.id) {
+                    fBtn.style.background = 'var(--text-color)';
+                    fBtn.style.color = 'white';
+                }
+                fBtn.onclick = () => {
+                    this.game.world.formationType = f.id;
+                    this.updateSelection(selection);
+                    this.showToast(`Formation: ${f.label}`);
+                };
+                formContainer.appendChild(fBtn);
+            });
+            actionsPanel.appendChild(formContainer);
 
             // Check if any selected item is under construction
             const anyUnderConstruction = selection.some(u => u.isUnderConstruction);
@@ -1209,6 +1273,46 @@ export class UI {
         }
 
         this.elements.tooltipArea.classList.remove('visible');
+    }
+    checkScreenSize() {
+        const minWidth = 1260;
+        let overlay = document.getElementById('screen-size-overlay');
+        
+        if (window.innerWidth < minWidth) {
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = 'screen-size-overlay';
+                overlay.style.position = 'fixed';
+                overlay.style.top = '0';
+                overlay.style.left = '0';
+                overlay.style.width = '100%';
+                overlay.style.height = '100%';
+                overlay.style.background = 'rgba(255, 255, 255, 0.95)';
+                overlay.style.zIndex = '99999';
+                overlay.style.display = 'flex';
+                overlay.style.flexDirection = 'column';
+                overlay.style.alignItems = 'center';
+                overlay.style.justifyContent = 'center';
+                overlay.style.textAlign = 'center';
+                overlay.style.padding = '20px';
+                overlay.style.fontFamily = '"Inter", sans-serif';
+                overlay.className = 'scribble';
+                
+                const title = document.createElement('h1');
+                title.innerText = 'Doodle RTS';
+                overlay.appendChild(title);
+                
+                const msg = document.createElement('p');
+                msg.innerText = 'Please use a larger screen or maximize your window to play.\n(Minimum width: 1260px)';
+                msg.style.fontSize = '1.2rem';
+                msg.style.lineHeight = '1.6';
+                overlay.appendChild(msg);
+                
+                document.body.appendChild(overlay);
+            }
+        } else if (overlay) {
+            overlay.remove();
+        }
     }
 }
 

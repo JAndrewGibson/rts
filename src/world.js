@@ -60,12 +60,12 @@ class ResourceNode {
             ctx.strokeStyle = '#2c3e50';
             ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
             ctx.lineWidth = 2;
-            
+
             ctx.beginPath();
             ctx.rect(-this.radius, -this.radius, this.radius * 2, this.radius * 2);
             ctx.fill();
             ctx.stroke();
-            
+
             ctx.fillStyle = '#2c3e50';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
@@ -198,6 +198,20 @@ class Unit {
         this.isStapled = false;
         this.struggleTimer = 0;
         this.hasStapleRemover = false;
+        this.assignedArea = null;
+    }
+
+    takeDamage(damage, attacker) {
+        if (this.isDead) return;
+        this.hp -= damage;
+
+        // Retaliation: if not already attacking, fight back
+        if (!this.attackTarget && attacker && attacker.hp > 0 && attacker.playerId !== this.playerId) {
+            // Only retaliate if the attacker is a Unit (structures don't move/retaliate the same way)
+            if (attacker instanceof Unit) {
+                this.setAttackTarget(attacker);
+            }
+        }
     }
 
     moveTowards(dt, currentSpeed, destX, destY) {
@@ -213,14 +227,14 @@ class Unit {
         let sepX = 0;
         let sepY = 0;
         let count = 0;
-        
+
         this.game.world.units.forEach(other => {
             if (other === this || other.isDead || other.isAerial || this.isAerial) return;
             const odx = this.x - other.x;
             const ody = this.y - other.y;
             const odistSq = odx * odx + ody * ody;
             const minDist = (this.radius + other.radius) * 1.1; // Allow denser packing
-            
+
             if (odistSq > 0 && odistSq < minDist * minDist) {
                 const odist = Math.sqrt(odistSq);
                 const weight = (minDist - odist) / minDist;
@@ -234,11 +248,11 @@ class Unit {
             // Apply separation proportional to how crowded they are
             sepX = sepX * currentSpeed * 1.2;
             sepY = sepY * currentSpeed * 1.2;
-            
+
             // Prioritize forward movement (0.8), gently nudge with separation
             vx = vx * 0.8 + sepX;
             vy = vy * 0.8 + sepY;
-            
+
             const finalDist = Math.sqrt(vx * vx + vy * vy) || 1;
             // Only cap speed if it exceeds max speed, don't force minimum speed
             if (finalDist > currentSpeed) {
@@ -249,7 +263,7 @@ class Unit {
 
         const moveX = vx * dt;
         const moveY = vy * dt;
-        
+
         this.x += moveX;
         this.y += moveY;
         this.wiggle += this.wiggleSpeed * dt;
@@ -304,7 +318,7 @@ class Unit {
         // Search vats (units)
         this.game.world.units.forEach(u => {
             if (u.playerId !== pId || u.type !== 'vat' || u.isUnderConstruction) return;
-            
+
             let canAccept = false;
             if (['ink', 'redInk', 'coffee', 'whiteout'].includes(resourceType)) {
                 // Expansion allows dual storage, otherwise check current cargo
@@ -330,7 +344,7 @@ class Unit {
     processNextTask() {
         if (this.taskQueue.length === 0) return;
         const task = this.taskQueue[0];
-        
+
         if (task.type === 'move') {
             this.taskQueue.shift();
             this.target = { x: task.x, y: task.y };
@@ -374,12 +388,12 @@ class Unit {
         this.lastY = this.y;
 
         if (this.stuckTimer > 1.5) { // Stuck for 1.5 seconds
-            
+
             // Graceful arrival check
             if (this.taskQueue.length > 0) {
                 const task = this.taskQueue[0];
                 if (task.target) {
-                    const dist = Math.sqrt((this.x - task.target.x)**2 + (this.y - task.target.y)**2);
+                    const dist = Math.sqrt((this.x - task.target.x) ** 2 + (this.y - task.target.y) ** 2);
                     if (dist < 80) { // If close to target but stuck, assume we arrived at perimeter
                         this.pathIndex = this.currentPath.length; // Force arrival
                         this.stuckTimer = 0;
@@ -387,7 +401,7 @@ class Unit {
                     }
                 }
             } else if (this.target) {
-                const dist = Math.sqrt((this.x - this.target.x)**2 + (this.y - this.target.y)**2);
+                const dist = Math.sqrt((this.x - this.target.x) ** 2 + (this.y - this.target.y) ** 2);
                 if (dist < 80) {
                     this.pathIndex = this.currentPath.length; // Force arrival
                     this.stuckTimer = 0;
@@ -401,13 +415,13 @@ class Unit {
                 if (u !== this && !u.isAerial && u.state !== 'walk' && u.state !== 'attack') {
                     const dx = u.x - this.x;
                     const dy = u.y - this.y;
-                    if (dx*dx + dy*dy < 150*150) {
+                    if (dx * dx + dy * dy < 150 * 150) {
                         const r = Math.floor(u.y / this.game.world.gridSize);
                         const c = Math.floor(u.x / this.game.world.gridSize);
                         if (r >= 0 && r < this.game.world.grid.length && c >= 0 && c < this.game.world.grid[0].length) {
                             if (this.game.world.grid[r][c] === 0) {
                                 this.game.world.grid[r][c] = 1;
-                                tempBlocks.push({r, c});
+                                tempBlocks.push({ r, c });
                             }
                         }
                     }
@@ -554,17 +568,17 @@ class Unit {
                 if (u.playerId === this.playerId && u !== this) {
                     const dx = u.x - this.x;
                     const dy = u.y - this.y;
-                    if (dx*dx + dy*dy < 120*120) u.hasShield = true;
+                    if (dx * dx + dy * dy < 120 * 120) u.hasShield = true;
                 }
             });
         }
-        
+
         if (this.type === 'fountainPen') {
             this.game.world.units.forEach(u => {
                 if (u.playerId === this.playerId && u !== this) {
                     const dx = u.x - this.x;
                     const dy = u.y - this.y;
-                    if (dx*dx + dy*dy < 80*80) u.hasSpeedTrail = true;
+                    if (dx * dx + dy * dy < 80 * 80) u.hasSpeedTrail = true;
                 }
             });
         }
@@ -574,14 +588,14 @@ class Unit {
                 if (tile.playerId !== this.playerId) {
                     const dx = tile.x - this.x;
                     const dy = tile.y - this.y;
-                    if (dx*dx + dy*dy < 100*100) tile.duration = 0;
+                    if (dx * dx + dy * dy < 100 * 100) tile.duration = 0;
                 }
             });
             this.game.world.units.forEach(u => {
                 if (u.playerId === this.playerId && u.isStapled) {
                     const dx = u.x - this.x;
                     const dy = u.y - this.y;
-                    if (dx*dx + dy*dy < 100*100) {
+                    if (dx * dx + dy * dy < 100 * 100) {
                         u.isStapled = false;
                         u.struggleTimer = 0;
                         u.state = 'idle';
@@ -597,20 +611,20 @@ class Unit {
                 const dy = this.y - b.y;
                 const halfW = b.width / 2;
                 const halfH = b.height / 2;
-                
+
                 // AABB-Circle collision check
                 const closestX = Math.max(b.x - halfW, Math.min(this.x, b.x + halfW));
                 const closestY = Math.max(b.y - halfH, Math.min(this.y, b.y + halfH));
-                
+
                 const distanceX = this.x - closestX;
                 const distanceY = this.y - closestY;
                 const distanceSq = (distanceX * distanceX) + (distanceY * distanceY);
-                
+
                 if (distanceSq < (this.radius * this.radius)) {
                     const distance = Math.sqrt(distanceSq) || 0.1;
                     const overlap = this.radius - distance;
                     const angle = Math.atan2(distanceY, distanceX);
-                    
+
                     // If we are EXACTLY at the center of the building (closestX == this.x), 
                     // we need to push out towards the nearest edge
                     if (distanceSq < 0.1) {
@@ -629,11 +643,11 @@ class Unit {
             this.game.world.barriers.forEach(b => {
                 const closestX = Math.max(b.x, Math.min(this.x, b.x + b.width));
                 const closestY = Math.max(b.y, Math.min(this.y, b.y + b.height));
-                
+
                 const distanceX = this.x - closestX;
                 const distanceY = this.y - closestY;
                 const distanceSq = (distanceX * distanceX) + (distanceY * distanceY);
-                
+
                 if (distanceSq < (this.radius * this.radius)) {
                     const distance = Math.sqrt(distanceSq) || 0.1;
                     const overlap = this.radius - distance;
@@ -653,6 +667,30 @@ class Unit {
                 this.evasion = 0.7; // 70% miss chance in cloud
             }
         });
+
+        // Handle Attack Area Logic
+        if (this.assignedArea && this.taskQueue.length === 0) {
+            // If attacking someone who left the area, drop them
+            if (this.attackTarget && !this.assignedArea.contains(this.attackTarget.x, this.attackTarget.y)) {
+                this.attackTarget = null;
+                this.currentPath = [];
+            }
+
+            // Look for new enemies in the area if not currently attacking a valid target
+            if (!this.attackTarget) {
+                const enemy = this.game.world.units.find(u =>
+                    u.playerId !== this.playerId && u.hp > 0 &&
+                    this.assignedArea.contains(u.x, u.y)
+                );
+                if (enemy) {
+                    this.setAttackTarget(enemy);
+                } else if (!this.target) {
+                    // Patrol: pick random point in area
+                    const pt = this.assignedArea.getRandomPoint();
+                    this.setTarget(pt.x, pt.y);
+                }
+            }
+        }
 
         if (this.attackTarget) {
             if (this.attackTarget.hp <= 0) {
@@ -692,7 +730,7 @@ class Unit {
                     this.attack(this.attackTarget, currentDamage);
                     this.timer = 0;
                     // Don't clear path immediately if we are just slightly out of range due to pushing
-                    if (dist < this.attackRange * 0.8) this.currentPath = []; 
+                    if (dist < this.attackRange * 0.8) this.currentPath = [];
                 }
             }
         } else if (this.target) {
@@ -811,11 +849,11 @@ class Unit {
                     const toTake = Math.min(rate, this.cargo.capacity - this.cargo.amount, target.amount);
 
                     if (toTake > 0) {
-                        const resourceType = target.type === 'ink_splat' ? 'ink' : 
-                                            (target.type === 'coal_mine' ? 'coal' : 
-                                            (target.type === 'coffee_splat' ? 'coffee' : 
-                                            (target.type === 'mistake' ? 'redInk' :
-                                            (target.type === 'bottle' ? 'whiteout' : target.type))));
+                        const resourceType = target.type === 'ink_splat' ? 'ink' :
+                            (target.type === 'coal_mine' ? 'coal' :
+                                (target.type === 'coffee_splat' ? 'coffee' :
+                                    (target.type === 'mistake' ? 'redInk' :
+                                        (target.type === 'bottle' ? 'whiteout' : target.type))));
 
                         if (this.cargo.amount === 0 || this.cargo.type === resourceType) {
                             this.cargo.type = resourceType;
@@ -955,7 +993,7 @@ class Unit {
         if (this.type === 'ninja' && target.type === 'pirate') multiplier = 2.0;
         if (this.type === 'pirate' && target.type === 'cowboy') multiplier = 2.0;
         if (this.type === 'cowboy' && target.type === 'ninja') multiplier = 2.0;
-        
+
         // Evasion check
         if (target.evasion > 0 && Math.random() < target.evasion) {
             console.log("Missed!");
@@ -964,7 +1002,7 @@ class Unit {
 
         // Distance Lethality (Cowboy)
         if (this.type === 'cowboy') {
-            const dist = Math.sqrt((this.x - target.x)**2 + (this.y - target.y)**2);
+            const dist = Math.sqrt((this.x - target.x) ** 2 + (this.y - target.y) ** 2);
             if (dist > this.attackRange * 0.7) multiplier *= 1.5; // Bonus for long range shots
         }
 
@@ -974,7 +1012,7 @@ class Unit {
         let effectiveDefense = target.defense || 0;
         if (target.hasShield) effectiveDefense += 15;
         const finalDamage = Math.max(1, rawDamage - effectiveDefense);
-        target.hp -= finalDamage;
+        target.takeDamage(finalDamage, this);
 
         if (this.type === 'charcoalSmudger' && Math.random() > 0.6) {
             this.game.world.smudgeClouds.push(new SmudgeCloud(this.game, target.x, target.y, 8, this.playerId));
@@ -985,7 +1023,7 @@ class Unit {
             const splashRange = 60;
             this.game.world.units.forEach(u => {
                 if (u !== target && u.playerId !== this.playerId && u.hp > 0) {
-                    const dSq = (u.x - target.x)**2 + (u.y - target.y)**2;
+                    const dSq = (u.x - target.x) ** 2 + (u.y - target.y) ** 2;
                     if (dSq < splashRange * splashRange) {
                         u.hp -= finalDamage * 0.4; // 40% splash
                     }
@@ -995,197 +1033,197 @@ class Unit {
     }
 
 
-render(ctx) {
-    // Draw path if selected and belongs to local player
-    const isLocal = this.playerId === this.game.config.localPlayerId;
-    if (isLocal && this.selected && (this.target || this.attackTarget || this.taskQueue.length > 0)) {
-        ctx.save();
-        ctx.strokeStyle = 'rgba(52, 152, 219, 0.5)';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([10, 5]);
-        ctx.beginPath();
-        ctx.moveTo(this.x, this.y);
-
-        // Draw current path
-        for (let i = this.pathIndex; i < this.currentPath.length; i++) {
-            if (this.attackTarget && i === this.currentPath.length - 1) {
-                ctx.lineTo(this.attackTarget.x, this.attackTarget.y);
-            } else {
-                ctx.lineTo(this.currentPath[i].x, this.currentPath[i].y);
-            }
-        }
-
-        // Draw lines to queued targets
-        this.taskQueue.forEach(task => {
-            if (task.type === 'move') {
-                ctx.lineTo(task.x, task.y);
-            } else if (task.type === 'attack' && task.target) {
-                ctx.lineTo(task.target.x, task.target.y);
-            }
-        });
-
-        ctx.stroke();
-        ctx.restore();
-    }
-
-    ctx.save();
-
-    ctx.translate(this.x, this.y);
-
-    // Apply wiggle if moving or struggling
-    if (this.target || this.attackTarget || this.isStapled) {
-        const speed = this.isStapled ? 20 : this.wiggleSpeed;
-        ctx.rotate(Math.sin(Date.now() * 0.01 * speed) * 0.1);
-    }
-
-    // Draw selection indicator (sketchy circle)
-    if (this.selected) {
-        ctx.strokeStyle = '#3498db';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 3]);
-        ctx.beginPath();
-        ctx.arc(0, 0, this.radius + 8, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-    }
-    
-    if (this.hasShield) {
-        ctx.strokeStyle = 'rgba(52, 152, 219, 0.7)';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(0, 0, this.radius + 12, 0, Math.PI * 2);
-        ctx.stroke();
-    }
- 
-    // Handle Construction Progress for Units
-    if (this.isUnderConstruction) {
-        ctx.save();
-        ctx.globalAlpha = 0.4 + Math.sin(Date.now() / 200) * 0.1;
-        
-        // Progress bar
-        const barW = this.radius * 2;
-        const barH = 6;
-        ctx.strokeStyle = '#2c3e50';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(-barW / 2, -this.radius - 20, barW, barH);
-        ctx.fillStyle = '#f1c40f';
-        ctx.fillRect(-barW / 2 + 0.5, -this.radius - 19.5, (barW - 1) * (this.constructionProgress || 0), barH - 1);
-        ctx.restore();
-    }
-
-    // Draw Unit Image (fallback to procedural if not loaded)
-    const assetKey = `${this.type}_${this.state}`;
-    const playerAssets = this.game.world.customAssets[this.playerId];
-    let customFrames = playerAssets ? playerAssets[assetKey] : null;
-
-    if ((!customFrames || customFrames.length === 0) && this.state !== 'idle') {
-        customFrames = playerAssets ? playerAssets[`${this.type}_idle`] : null;
-    }
-
-    if (customFrames && customFrames.length > 0) {
-        const meta = this.game.world.customMeta ? this.game.world.customMeta[assetKey] : { loopType: 'loop' };
-        let displayIndex = 0;
-        if (meta && meta.loopType === 'boomerang' && customFrames.length > 1) {
-            const cycleLength = (customFrames.length - 1) * 2;
-            const cycleIndex = this.animFrame % cycleLength;
-            displayIndex = cycleIndex < customFrames.length ? cycleIndex : cycleLength - cycleIndex;
-        } else {
-            displayIndex = this.animFrame % customFrames.length;
-        }
-
-        const frameImg = customFrames[displayIndex];
-        if (frameImg && frameImg.complete) {
-            const size = this.radius * 2.5;
-            ctx.drawImage(frameImg, -size / 2, -size / 2, size, size);
-        }
-    } else {
-        const img = this.game.world.assets[this.type];
-        if (img && img.complete && img.naturalWidth > 0) {
-            const size = this.radius * 2.5;
-            ctx.drawImage(img, -size / 2, -size / 2, size, size);
-        } else {
-            // Procedural fallback: Box with Name
-            const palette = this.game.world.playerPalettes[this.playerId] || { primary: '#2c3e50', secondary: '#c0392b' };
-            ctx.strokeStyle = palette.primary;
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    render(ctx) {
+        // Draw path if selected and belongs to local player
+        const isLocal = this.playerId === this.game.config.localPlayerId;
+        if (isLocal && this.selected && (this.target || this.attackTarget || this.taskQueue.length > 0)) {
+            ctx.save();
+            ctx.strokeStyle = 'rgba(52, 152, 219, 0.5)';
             ctx.lineWidth = 2;
-            
-            const boxSize = this.radius * 2;
+            ctx.setLineDash([10, 5]);
             ctx.beginPath();
-            ctx.rect(-boxSize/2, -boxSize/2, boxSize, boxSize);
-            ctx.fill();
+            ctx.moveTo(this.x, this.y);
+
+            // Draw current path
+            for (let i = this.pathIndex; i < this.currentPath.length; i++) {
+                if (this.attackTarget && i === this.currentPath.length - 1) {
+                    ctx.lineTo(this.attackTarget.x, this.attackTarget.y);
+                } else {
+                    ctx.lineTo(this.currentPath[i].x, this.currentPath[i].y);
+                }
+            }
+
+            // Draw lines to queued targets
+            this.taskQueue.forEach(task => {
+                if (task.type === 'move') {
+                    ctx.lineTo(task.x, task.y);
+                } else if (task.type === 'attack' && task.target) {
+                    ctx.lineTo(task.target.x, task.target.y);
+                }
+            });
+
             ctx.stroke();
-            
-            ctx.fillStyle = palette.primary;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.font = `bold ${Math.floor(boxSize * 0.3)}px "Inter", sans-serif`;
-            ctx.fillText(this.type.toUpperCase(), 0, 0);
+            ctx.restore();
         }
-    }
 
-    // Draw Work Line (Build/Harvest)
-    if (this.taskQueue.length > 0) {
-        const task = this.taskQueue[0];
-        if ((task.type === 'build' || task.type === 'harvest') && task.target) {
-            const target = task.target;
-            const dx = target.x - this.x;
-            const dy = target.y - this.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
+        ctx.save();
 
-            const minDist = (task.type === 'build') ? (target.width + target.height) / 2 + 30 : target.radius + this.radius + 20;
-            if (dist < minDist) {
-                ctx.save();
-                // We are already translated to this.x, this.y
-                ctx.strokeStyle = 'rgba(44, 62, 80, 0.5)';
-                ctx.setLineDash([2, 5]);
-                ctx.lineWidth = 1;
+        ctx.translate(this.x, this.y);
+
+        // Apply wiggle if moving or struggling
+        if (this.target || this.attackTarget || this.isStapled) {
+            const speed = this.isStapled ? 20 : this.wiggleSpeed;
+            ctx.rotate(Math.sin(Date.now() * 0.01 * speed) * 0.1);
+        }
+
+        // Draw selection indicator (sketchy circle)
+        if (this.selected) {
+            ctx.strokeStyle = '#3498db';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 3]);
+            ctx.beginPath();
+            ctx.arc(0, 0, this.radius + 8, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        if (this.hasShield) {
+            ctx.strokeStyle = 'rgba(52, 152, 219, 0.7)';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(0, 0, this.radius + 12, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        // Handle Construction Progress for Units
+        if (this.isUnderConstruction) {
+            ctx.save();
+            ctx.globalAlpha = 0.4 + Math.sin(Date.now() / 200) * 0.1;
+
+            // Progress bar
+            const barW = this.radius * 2;
+            const barH = 6;
+            ctx.strokeStyle = '#2c3e50';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(-barW / 2, -this.radius - 20, barW, barH);
+            ctx.fillStyle = '#f1c40f';
+            ctx.fillRect(-barW / 2 + 0.5, -this.radius - 19.5, (barW - 1) * (this.constructionProgress || 0), barH - 1);
+            ctx.restore();
+        }
+
+        // Draw Unit Image (fallback to procedural if not loaded)
+        const assetKey = `${this.type}_${this.state}`;
+        const playerAssets = this.game.world.customAssets[this.playerId];
+        let customFrames = playerAssets ? playerAssets[assetKey] : null;
+
+        if ((!customFrames || customFrames.length === 0) && this.state !== 'idle') {
+            customFrames = playerAssets ? playerAssets[`${this.type}_idle`] : null;
+        }
+
+        if (customFrames && customFrames.length > 0) {
+            const meta = this.game.world.customMeta ? this.game.world.customMeta[assetKey] : { loopType: 'loop' };
+            let displayIndex = 0;
+            if (meta && meta.loopType === 'boomerang' && customFrames.length > 1) {
+                const cycleLength = (customFrames.length - 1) * 2;
+                const cycleIndex = this.animFrame % cycleLength;
+                displayIndex = cycleIndex < customFrames.length ? cycleIndex : cycleLength - cycleIndex;
+            } else {
+                displayIndex = this.animFrame % customFrames.length;
+            }
+
+            const frameImg = customFrames[displayIndex];
+            if (frameImg && frameImg.complete) {
+                const size = this.radius * 2.5;
+                ctx.drawImage(frameImg, -size / 2, -size / 2, size, size);
+            }
+        } else {
+            const img = this.game.world.assets[this.type];
+            if (img && img.complete && img.naturalWidth > 0) {
+                const size = this.radius * 2.5;
+                ctx.drawImage(img, -size / 2, -size / 2, size, size);
+            } else {
+                // Procedural fallback: Box with Name
+                const palette = this.game.world.playerPalettes[this.playerId] || { primary: '#2c3e50', secondary: '#c0392b' };
+                ctx.strokeStyle = palette.primary;
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                ctx.lineWidth = 2;
+
+                const boxSize = this.radius * 2;
                 ctx.beginPath();
-                ctx.moveTo(0, 0);
-                ctx.lineTo(dx, dy);
+                ctx.rect(-boxSize / 2, -boxSize / 2, boxSize, boxSize);
+                ctx.fill();
                 ctx.stroke();
 
-                // Simple "sparkle" or "dust" at target point
-                ctx.fillStyle = 'rgba(44, 62, 80, 0.3)';
-                const sx = dx * 0.9;
-                const sy = dy * 0.9;
-                ctx.fillRect(sx - 2, sy - 2, 4, 4);
-                ctx.restore();
+                ctx.fillStyle = palette.primary;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.font = `bold ${Math.floor(boxSize * 0.3)}px "Inter", sans-serif`;
+                ctx.fillText(this.type.toUpperCase(), 0, 0);
             }
         }
-    }
 
-    // Draw Staple overlay if stapled
-    if (this.isStapled) {
-        ctx.strokeStyle = '#2c3e50';
-        ctx.lineWidth = 4;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(-20, -5);
-        ctx.lineTo(20, -5);
-        ctx.moveTo(-20, -5);
-        ctx.lineTo(-20, 10);
-        ctx.moveTo(20, -5);
-        ctx.lineTo(20, 10);
-        ctx.stroke();
-    }
+        // Draw Work Line (Build/Harvest)
+        if (this.taskQueue.length > 0) {
+            const task = this.taskQueue[0];
+            if ((task.type === 'build' || task.type === 'harvest') && task.target) {
+                const target = task.target;
+                const dx = target.x - this.x;
+                const dy = target.y - this.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
 
-    ctx.restore();
+                const minDist = (task.type === 'build') ? (target.width + target.height) / 2 + 30 : target.radius + this.radius + 20;
+                if (dist < minDist) {
+                    ctx.save();
+                    // We are already translated to this.x, this.y
+                    ctx.strokeStyle = 'rgba(44, 62, 80, 0.5)';
+                    ctx.setLineDash([2, 5]);
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    ctx.lineTo(dx, dy);
+                    ctx.stroke();
 
-    // HP Bar (Relative to world context, so we don't translate for this)
-    if (this.selected || this.hp < this.maxHp) {
-        const barW = 50;
-        const barH = 6;
-        ctx.save();
-        ctx.translate(this.x, this.y);
-        ctx.strokeStyle = '#2c3e50';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(-barW / 2, -45, barW, barH);
-        ctx.fillStyle = '#e74c3c';
-        ctx.fillRect(-barW / 2 + 1, -44, (barW - 2) * (this.hp / this.maxHp), barH - 2);
+                    // Simple "sparkle" or "dust" at target point
+                    ctx.fillStyle = 'rgba(44, 62, 80, 0.3)';
+                    const sx = dx * 0.9;
+                    const sy = dy * 0.9;
+                    ctx.fillRect(sx - 2, sy - 2, 4, 4);
+                    ctx.restore();
+                }
+            }
+        }
+
+        // Draw Staple overlay if stapled
+        if (this.isStapled) {
+            ctx.strokeStyle = '#2c3e50';
+            ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(-20, -5);
+            ctx.lineTo(20, -5);
+            ctx.moveTo(-20, -5);
+            ctx.lineTo(-20, 10);
+            ctx.moveTo(20, -5);
+            ctx.lineTo(20, 10);
+            ctx.stroke();
+        }
+
         ctx.restore();
+
+        // HP Bar (Relative to world context, so we don't translate for this)
+        if (this.selected || this.hp < this.maxHp) {
+            const barW = 50;
+            const barH = 6;
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            ctx.strokeStyle = '#2c3e50';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(-barW / 2, -45, barW, barH);
+            ctx.fillStyle = '#e74c3c';
+            ctx.fillRect(-barW / 2 + 1, -44, (barW - 2) * (this.hp / this.maxHp), barH - 2);
+            ctx.restore();
+        }
     }
-}
 }
 
 class SimpleDoodle extends Unit {
@@ -1229,6 +1267,10 @@ class Structure {
         this.rallyPoints = [{ x: this.x, y: this.y + 120, target: null }];
     }
 
+    takeDamage(damage, attacker) {
+        this.hp -= damage;
+    }
+
     update(dt) {
         if (this.isUnderConstruction) {
             // Find all doodles assigned to build this structure
@@ -1258,6 +1300,9 @@ class Structure {
                 if (this.constructionProgress >= 1) {
                     this.constructionProgress = 1;
                     this.isUnderConstruction = false;
+                    if (this.playerId === this.game.config.localPlayerId) {
+                        this.game.ui.showToast(`${this.type.toUpperCase()} complete!`);
+                    }
                     // Finish task for all builders
                     builders.forEach(u => u.taskQueue.shift());
                 }
@@ -1367,7 +1412,9 @@ class Structure {
         }
 
         this.game.world.units.push(unit);
-        this.game.ui.showToast(`Unit trained: ${type}`);
+        if (this.playerId === this.game.config.localPlayerId) {
+            this.game.ui.showToast(`Unit trained: ${type}`);
+        }
 
         // Apply rally points
         if (this.rallyPoints && this.rallyPoints.length > 0) {
@@ -1391,7 +1438,7 @@ class Structure {
         if (this.type === 'saloon') return 'cowboy';
         if (this.type === 'docks') return 'pirate';
         if (this.type === 'sharpener') return 'protractor';
-        return null; 
+        return null;
     }
 
     render(ctx) {
@@ -1454,12 +1501,12 @@ class Structure {
             ctx.strokeStyle = palette.primary;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
             ctx.lineWidth = 4;
-            
+
             ctx.beginPath();
             ctx.rect(-this.width / 2, -this.height / 2, this.width, this.height);
             ctx.fill();
             ctx.stroke();
-            
+
             ctx.fillStyle = palette.primary;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
@@ -1502,12 +1549,12 @@ class Structure {
                 ctx.arc(rp.x - this.x, rp.y - this.y, 5, 0, Math.PI * 2);
                 ctx.fillStyle = idx === 0 ? 'rgba(46, 204, 113, 0.7)' : 'rgba(46, 204, 113, 0.3)';
                 ctx.fill();
-                
+
                 // Draw line to rally point
                 ctx.beginPath();
                 ctx.setLineDash([5, 5]);
-                const startX = idx === 0 ? this.x : this.rallyPoints[idx-1].x;
-                const startY = idx === 0 ? this.y : this.rallyPoints[idx-1].y;
+                const startX = idx === 0 ? this.x : this.rallyPoints[idx - 1].x;
+                const startY = idx === 0 ? this.y : this.rallyPoints[idx - 1].y;
                 ctx.moveTo(0, 0);
                 ctx.lineTo(rp.x - this.x, rp.y - this.y);
                 ctx.strokeStyle = 'rgba(46, 204, 113, 0.5)';
@@ -1874,7 +1921,7 @@ class SmudgeCloud {
     update(dt) {
         this.timer += dt;
         this.tickTimer += dt;
-        
+
         if (this.tickTimer >= 0.5) {
             this.tickTimer = 0;
             this.game.world.units.forEach(u => {
@@ -1895,7 +1942,7 @@ class SmudgeCloud {
         ctx.translate(this.x, this.y);
         ctx.globalAlpha = 0.4 * (1 - this.timer / this.duration);
         ctx.fillStyle = '#111111';
-        
+
         ctx.beginPath();
         for (let i = 0; i < 8; i++) {
             const angle = (i * Math.PI * 2) / 8;
@@ -1981,7 +2028,7 @@ class PiousDoodle extends Unit {
                 if (distSq > range * range) this.isPraying = false;
             }
         }
-        
+
         super.update(dt);
 
         // Override state if praying
@@ -2006,15 +2053,48 @@ class TheRip extends Structure {
             const unit = new PiousDoodle(this.game, spawnPos.x, spawnPos.y, this.game.world.nextUnitId++);
             unit.playerId = this.playerId;
             this.game.world.units.push(unit);
-            
+
             // Start praying immediately
             unit.taskQueue = [{ type: 'pray', target: this }];
             unit.isPraying = true;
-            
-            this.game.ui.showToast("Pious Doodle spawned and started praying!");
+
+            if (this.playerId === this.game.config.localPlayerId) {
+                this.game.ui.showToast("Pious Doodle spawned and started praying!");
+            }
         } else {
             super.finishTraining(type);
         }
+    }
+}
+
+class AttackArea {
+    constructor(game, x1, y1, x2, y2, playerId) {
+        this.game = game;
+        this.x1 = Math.min(x1, x2);
+        this.y1 = Math.min(y1, y2);
+        this.x2 = Math.max(x1, x2);
+        this.y2 = Math.max(y1, y2);
+        this.playerId = playerId;
+        this.width = this.x2 - this.x1;
+        this.height = this.y2 - this.y1;
+    }
+
+    contains(x, y) {
+        return x >= this.x1 && x <= this.x2 && y >= this.y1 && y <= this.y2;
+    }
+
+    getRandomPoint() {
+        return {
+            x: this.x1 + Math.random() * this.width,
+            y: this.y1 + Math.random() * this.height
+        };
+    }
+
+    getCenter() {
+        return {
+            x: this.x1 + this.width / 2,
+            y: this.y1 + this.height / 2
+        };
     }
 }
 
@@ -2028,11 +2108,14 @@ export class World {
         this.inkClouds = [];
         this.smudgeClouds = [];
         this.tapeTiles = [];
+        this.attackAreas = [];
         this.selection = [];
         this.mapSize = 3000;
         this.zoom = 1.0;
         this.minZoom = 0.2;
         this.maxZoom = 3.0;
+        this.liftAmount = 0; // Transition for "lifting" the paper
+        this.formationType = 'line'; // line, grid, flank
 
         // Use player-prefixed IDs to avoid network collisions
         const pId = this.game.config.localPlayerId || 1;
@@ -2048,6 +2131,9 @@ export class World {
         this.assets.ninja.src = 'ninja.png';
         this.assets.cowboy.src = 'cowboy.png';
         this.assets.pirate.src = 'pirate.webp';
+
+        this.woodImg = new Image();
+        this.woodImg.src = 'assets/wood-texture.jpg';
 
         this.playerPalettes = {
             1: { primary: '#e74c3c', secondary: '#c0392b', tertiary: '#962d22' }, // Red
@@ -2110,7 +2196,9 @@ export class World {
             u.hasVatExpansion = true;
         });
 
-        this.game.ui.showToast(`Upgrade complete: ${upgrade.name}`);
+        if (playerId === this.game.config.localPlayerId) {
+            this.game.ui.showToast(`Upgrade complete: ${upgrade.name}`);
+        }
     }
 
     applyConfig(config, room) {
@@ -2132,11 +2220,11 @@ export class World {
         this.smudgeClouds = [];
         this.tapeTiles = [];
         this.coffeeFields = [];
-        
+
         this.playerResources = {};
         this.playerTiers = {};
         this.aiControllers = [];
-        
+
         const localId = this.game.config.localPlayerId || 1;
         this.nextUnitId = localId * 100000;
 
@@ -2157,12 +2245,12 @@ export class World {
             if (slot.type !== 'player' && slot.type !== 'computer') continue;
 
             const pId = i + 1; // pId is 1-indexed based on slot
-            
+
             // Initialize resources for this player
             let startingInk = 500;
             if (this.game.config.startResources === 'low') startingInk = 200;
             if (this.game.config.startResources === 'high') startingInk = 1000;
-            
+
             this.playerTiers[pId] = 1;
             this.playerResources[pId] = {
                 ink: startingInk,
@@ -2184,7 +2272,7 @@ export class World {
             if (slot.type === 'computer' && this.game.isHost) {
                 this.aiControllers.push(new AIController(this.game, pId));
             }
-            
+
             // Spawn Castle for each player
             const angle = i * (Math.PI * 2 / totalSlots);
             const dist = this.mapSize * 0.35;
@@ -2218,7 +2306,7 @@ export class World {
         for (let i = 0; i < totalSlots; i++) {
             const slot = slots ? slots[i] : { type: (i < totalSlots ? 'player' : 'open') };
             if (slot.type !== 'player' && slot.type !== 'computer') continue;
-            
+
             const pId = i + 1;
             const b = this.buildings.find(b => b.type === 'castle' && b.playerId === pId);
             if (b) this.spawnStartingResources(b.x, b.y, pId);
@@ -2232,27 +2320,16 @@ export class World {
     }
 
     spawnStartingResources(cx, cy, playerId) {
-        const checkBlocked = (x, y, r) => {
-            return this.barriers.some(b => 
-                x + r > b.x && x - r < b.x + b.width && 
-                y + r > b.y && y - r < b.y + b.height
-            ) || this.buildings.some(b => 
-                Math.abs(x - b.x) < b.width/2 + r && Math.abs(y - b.y) < b.height/2 + r
-            );
-        };
-
         const spawnSafe = (type, dist, radius = 40) => {
             let attempts = 0;
             while (attempts < 50) {
                 const angle = Math.random() * Math.PI * 2;
                 const rx = cx + Math.cos(angle) * dist;
                 const ry = cy + Math.sin(angle) * dist;
-                
-                if (rx > radius && rx < this.mapSize - radius && ry > radius && ry < this.mapSize - radius) {
-                    if (!checkBlocked(rx, ry, radius)) {
-                        this.resources.push(new ResourceNode(this.game, rx, ry, type));
-                        return true;
-                    }
+
+                if (!this.checkBlocked(rx, ry, radius)) {
+                    this.resources.push(new ResourceNode(this.game, rx, ry, type));
+                    return true;
                 }
                 attempts++;
             }
@@ -2281,7 +2358,7 @@ export class World {
 
     cancelConstruction(item) {
         if (!item || !item.isUnderConstruction) return;
-        
+
         const stats = this.game.config.unitStats[item.type];
         if (stats && stats.cost) {
             // Refund percentage remaining
@@ -2295,11 +2372,11 @@ export class World {
             this.game.ui.updateResourceDisplay();
             this.game.ui.showToast(`Construction Cancelled. ${refundMsg.slice(0, -2)}.`);
         }
-        
+
         // Remove from world
         this.units = this.units.filter(u => u !== item);
         this.buildings = this.buildings.filter(b => b !== item);
-        
+
         this.updateGrid();
         this.selection = this.selection.filter(s => s !== item);
         this.game.ui.updateSelection(this.selection);
@@ -2441,15 +2518,30 @@ export class World {
         this.buildings.forEach(b => blockArea(b.x - b.width / 2, b.y - b.height / 2, b.width, b.height));
     }
 
+    checkBlocked(x, y, r) {
+        // Map boundaries
+        const margin = 60;
+        if (x - r < margin || x + r > this.mapSize - margin || y - r < margin || y + r > this.mapSize - margin) return true;
+
+        // Barriers & Buildings
+        const blockedByStatic = this.barriers.some(b =>
+            x + r > b.x && x - r < b.x + b.width &&
+            y + r > b.y && y - r < b.y + b.height
+        ) || this.buildings.some(b =>
+            Math.abs(x - b.x) < b.width / 2 + r && Math.abs(y - b.y) < b.height / 2 + r
+        );
+        if (blockedByStatic) return true;
+
+        // Other resources (prevent clumping)
+        return this.resources.some(res => {
+            const dx = x - res.x;
+            const dy = y - res.y;
+            const minDist = (r + res.radius) * 1.5;
+            return (dx * dx + dy * dy) < minDist * minDist;
+        });
+    }
+
     spawnResources() {
-        const checkBlocked = (x, y, r) => {
-            return this.barriers.some(b => 
-                x + r > b.x && x - r < b.x + b.width && 
-                y + r > b.y && y - r < b.y + b.height
-            ) || this.buildings.some(b => 
-                Math.abs(x - b.x) < b.width/2 + r && Math.abs(y - b.y) < b.height/2 + r
-            );
-        };
 
         const spawnRandom = (type, count, minDistFromPlayer, radius = 40) => {
             for (let i = 0; i < count; i++) {
@@ -2457,9 +2549,9 @@ export class World {
                 while (attempts < 50) {
                     const rx = radius + Math.random() * (this.mapSize - radius * 2);
                     const ry = radius + Math.random() * (this.mapSize - radius * 2);
-                    
+
                     const nearPlayer = this.buildings.some(b => Math.sqrt((b.x - rx) ** 2 + (b.y - ry) ** 2) < minDistFromPlayer);
-                    if (!nearPlayer && !checkBlocked(rx, ry, radius)) {
+                    if (!nearPlayer && !this.checkBlocked(rx, ry, radius)) {
                         this.resources.push(new ResourceNode(this.game, rx, ry, type));
                         break;
                     }
@@ -2508,7 +2600,7 @@ export class World {
             // Fallback for single player / legacy
             const pId = config.localPlayerId;
             this.playerPalettes[pId] = this.generatePaletteFromHex(config.playerColor);
-            this.loadCustomPacks(); 
+            this.loadCustomPacks();
         }
 
         // Re-initialize with new config
@@ -2519,11 +2611,11 @@ export class World {
         // Simple shade generator
         const rgb = this.hexToRgb(hex);
         const darken = (c, factor) => Math.floor(c * factor);
-        
+
         const primary = hex;
         const secondary = this.rgbToHex(darken(rgb[0], 0.8), darken(rgb[1], 0.8), darken(rgb[2], 0.8));
         const tertiary = this.rgbToHex(darken(rgb[0], 0.6), darken(rgb[1], 0.6), darken(rgb[2], 0.6));
-        
+
         return { primary, secondary, tertiary };
     }
 
@@ -2753,6 +2845,21 @@ export class World {
     }
 
     update(dt) {
+        // Update lift transition for paper shadow
+        const isMoving = this.game.input.mouse.isPanning ||
+            this.game.input.keys['KeyW'] || this.game.input.keys['KeyA'] ||
+            this.game.input.keys['KeyS'] || this.game.input.keys['KeyD'] ||
+            this.game.input.keys['ArrowUp'] || this.game.input.keys['ArrowLeft'] ||
+            this.game.input.keys['ArrowDown'] || this.game.input.keys['ArrowRight'];
+
+        const targetLift = isMoving ? 1 : 0;
+        const liftSpeed = 5.0; // Transition in 0.2 seconds
+        if (this.liftAmount < targetLift) {
+            this.liftAmount = Math.min(targetLift, this.liftAmount + dt * liftSpeed);
+        } else if (this.liftAmount > targetLift) {
+            this.liftAmount = Math.max(targetLift, this.liftAmount - dt * liftSpeed);
+        }
+
         // Update Buildings (Backwards for safe removal)
         for (let i = this.buildings.length - 1; i >= 0; i--) {
             const b = this.buildings[i];
@@ -2819,7 +2926,7 @@ export class World {
     broadcastState() {
         const localUnits = this.units.filter(u => u.playerId === this.game.config.localPlayerId);
         const localBuildings = this.buildings.filter(b => b.playerId === this.game.config.localPlayerId);
-        
+
         if (localUnits.length === 0 && localBuildings.length === 0) return;
 
         const state = {
@@ -2853,7 +2960,7 @@ export class World {
 
     handleRemoteUpdate(data) {
         if (!data) return;
-        
+
         // Handle Units
         if (data.units) {
             data.units.forEach(remoteUnit => {
@@ -2909,7 +3016,7 @@ export class World {
                     else if (rb.type === 'sharpener') building = new Sharpener(this.game, rb.x, rb.y, p, id);
                     else if (rb.type === 'coffeeShop') building = new CoffeeShop(this.game, rb.x, rb.y, p, id);
                     else if (rb.type === 'theRip') building = new TheRip(this.game, rb.x, rb.y, p, id);
-                    
+
                     if (building) {
                         this.buildings.push(building);
                         this.updateGrid();
@@ -2951,8 +3058,8 @@ export class World {
                     while (attempts < 50) {
                         const rx = Math.random() * this.mapSize;
                         const ry = Math.random() * this.mapSize;
-                        const isBlocked = this.barriers.some(b => 
-                            rx + res.radius > b.x && rx - res.radius < b.x + b.width && 
+                        const isBlocked = this.barriers.some(b =>
+                            rx + res.radius > b.x && rx - res.radius < b.x + b.width &&
                             ry + res.radius > b.y && ry - res.radius < b.y + b.height
                         );
                         if (!isBlocked) {
@@ -2999,10 +3106,10 @@ export class World {
         if (this.game.config.gameState !== 'PLAYING') return;
 
         const localId = this.game.config.localPlayerId;
-        
+
         // Find local player's castle
         const myCastle = this.buildings.find(b => b.type === 'castle' && b.playerId === localId);
-        
+
         if (!myCastle) {
             this.game.ui.showDefeat();
             return;
@@ -3025,6 +3132,18 @@ export class World {
     }
 
     render(ctx) {
+        // Draw Wood Background (The Desk)
+        if (this.woodImg.complete) {
+            ctx.save();
+            const pattern = ctx.createPattern(this.woodImg, 'repeat');
+            ctx.fillStyle = pattern;
+            ctx.fillRect(0, 0, this.game.canvas.width, this.game.canvas.height);
+            ctx.restore();
+        } else {
+            ctx.fillStyle = '#2c1a0b'; // Fallback dark wood color
+            ctx.fillRect(0, 0, this.game.canvas.width, this.game.canvas.height);
+        }
+
         ctx.save();
 
         // As per AGENTS.md: scale -> translate
@@ -3032,9 +3151,19 @@ export class World {
         ctx.scale(this.zoom, this.zoom);
         ctx.translate(-this.camera.x, -this.camera.y);
 
-        // Draw Paper Background
+        // Draw Paper Background with a dynamic shadow
+        ctx.save();
+
+        if (this.liftAmount > 0.01) {
+            ctx.shadowColor = `rgba(0,0,0,${0.4 * this.liftAmount})`;
+            ctx.shadowBlur = (40 * this.liftAmount) / this.zoom;
+            ctx.shadowOffsetX = (15 * this.liftAmount) / this.zoom;
+            ctx.shadowOffsetY = (15 * this.liftAmount) / this.zoom;
+        }
+
         ctx.fillStyle = '#fdfcf0'; // Notepad cream
         ctx.fillRect(0, 0, this.mapSize, this.mapSize);
+        ctx.restore();
 
         // Draw Paper Grid
         this.renderPaper(ctx);
@@ -3063,6 +3192,25 @@ export class World {
 
         // Draw Units
         this.units.forEach(unit => unit.render(ctx));
+
+        // Draw Attack Areas
+        this.attackAreas.forEach(area => {
+            ctx.save();
+            ctx.strokeStyle = 'rgba(241, 196, 15, 0.3)';
+            ctx.setLineDash([10, 5]);
+            ctx.lineWidth = 2;
+            ctx.strokeRect(area.x1, area.y1, area.width, area.height);
+
+            // Subtle "X" or icon in center
+            const center = area.getCenter();
+            ctx.beginPath();
+            ctx.moveTo(center.x - 10, center.y - 10);
+            ctx.lineTo(center.x + 10, center.y + 10);
+            ctx.moveTo(center.x + 10, center.y - 10);
+            ctx.lineTo(center.x - 10, center.y + 10);
+            ctx.stroke();
+            ctx.restore();
+        });
 
         // Draw Placement Ghost
         if (this.placementMode) {
@@ -3115,7 +3263,7 @@ export class World {
         ctx.moveTo(100, 0);
         ctx.lineTo(100, this.mapSize);
         ctx.stroke();
-        
+
         // Draw Paper Borders (to make the edges clear against black)
         ctx.strokeStyle = 'rgba(0,0,0,0.1)';
         ctx.lineWidth = 1 / this.zoom;
@@ -3199,6 +3347,54 @@ export class World {
             }
         });
         this.game.ui.updateSelection(this.selection);
+    }
+
+    assignAttackArea(start, end) {
+        const localId = this.game.config.localPlayerId;
+        if (this.selection.length === 0) return;
+
+        const area = new AttackArea(this.game, start.x, start.y, end.x, end.y, localId);
+        this.attackAreas.push(area);
+
+        this.selection.forEach(unit => {
+            if (unit.playerId === localId) {
+                unit.assignedArea = area;
+                unit.taskQueue = [];
+                unit.attackTarget = null;
+                const center = area.getCenter();
+                unit.setTarget(center.x, center.y);
+            }
+        });
+
+        this.game.ui.showToast(`Attack Area assigned to ${this.selection.length} units`);
+    }
+
+    commandTargetArea(start, end) {
+        const localId = this.game.config.localPlayerId;
+        if (this.selection.length === 0) return;
+
+        const x1 = Math.min(start.x, end.x);
+        const x2 = Math.max(start.x, end.x);
+        const y1 = Math.min(start.y, end.y);
+        const y2 = Math.max(start.y, end.y);
+
+        const targetUnits = this.units.filter(u =>
+            u.playerId !== localId && u.hp > 0 &&
+            u.x >= x1 && u.x <= x2 && u.y >= y1 && u.y <= y2
+        );
+
+        if (targetUnits.length === 0) return;
+
+        const selectedUnits = this.selection.filter(u => u.playerId === localId && u instanceof Unit);
+        if (selectedUnits.length === 0) return;
+
+        // Distribute attackers among targets as equally as possible
+        selectedUnits.forEach((unit, index) => {
+            const target = targetUnits[index % targetUnits.length];
+            unit.setAttackTarget(target);
+        });
+
+        this.game.ui.showToast(`Targeting ${targetUnits.length} units with ${selectedUnits.length} attackers`);
     }
 
     commandMove(worldX, worldY, shift = false) {
@@ -3313,9 +3509,24 @@ export class World {
             return;
         }
 
+        // Check for click on an enemy building
+        const enemyBuilding = this.buildings.find(b => {
+            if (b.playerId === this.game.config.localPlayerId) return false;
+            return worldX >= b.x - b.width/2 && worldX <= b.x + b.width/2 &&
+                   worldY >= b.y - b.height/2 && worldY <= b.y + b.height/2;
+        });
+
+        if (enemyBuilding) {
+            this.selection.forEach(unit => {
+                if (shift) unit.addTask({ type: 'attack', target: enemyBuilding });
+                else unit.setAttackTarget(enemyBuilding);
+            });
+            return;
+        }
+
         // Check if we clicked on an enemy unit
         const enemy = this.units.find(u => {
-            if (u.playerId === this.selection[0].playerId) return false;
+            if (this.selection.length > 0 && u.playerId === this.selection[0].playerId) return false;
             const dx = u.x - worldX;
             const dy = u.y - worldY;
             return Math.sqrt(dx * dx + dy * dy) < u.radius;
@@ -3330,25 +3541,50 @@ export class World {
                 }
             });
         } else {
-            // Smart formation: Perpendicular to movement direction
+            // Formation logic
             const avgX = this.selection.reduce((sum, u) => sum + u.x, 0) / this.selection.length;
             const avgY = this.selection.reduce((sum, u) => sum + u.y, 0) / this.selection.length;
-
             const dx = worldX - avgX;
             const dy = worldY - avgY;
             const dist = Math.sqrt(dx * dx + dy * dy);
 
+            // Directional vectors
+            const vx = dist > 0 ? dx / dist : 0;
+            const vy = dist > 0 ? dy / dist : 1;
             // Perpendicular vector
-            const px = dist > 0 ? -dy / dist : 0;
-            const py = dist > 0 ? dx / dist : 1;
+            const px = -vy;
+            const py = vx;
 
             this.selection.forEach((unit, index) => {
+                let tx = worldX;
+                let ty = worldY;
                 const spacing = 60;
-                const offset = (index - (this.selection.length - 1) / 2) * spacing;
-                // Add a bit of "doodle jitter" to the formation so they aren't perfectly aligned
+
+                if (this.formationType === 'grid') {
+                    const cols = Math.ceil(Math.sqrt(this.selection.length));
+                    const row = Math.floor(index / cols);
+                    const col = index % cols;
+                    const offsetCol = (col - (cols - 1) / 2) * spacing;
+                    const offsetRow = (row - (Math.ceil(this.selection.length / cols) - 1) / 2) * spacing;
+                    tx = worldX + px * offsetCol - vx * offsetRow;
+                    ty = worldY + py * offsetCol - vy * offsetRow;
+                } else if (this.formationType === 'flank') {
+                    const side = index % 2 === 0 ? 1 : -1;
+                    const depth = Math.floor(index / 2);
+                    const offsetSide = side * (spacing * 1.5 + depth * 10);
+                    const offsetDepth = depth * spacing;
+                    tx = worldX + px * offsetSide - vx * offsetDepth;
+                    ty = worldY + py * offsetSide - vy * offsetDepth;
+                } else { // 'line' (standard)
+                    const offset = (index - (this.selection.length - 1) / 2) * spacing;
+                    tx = worldX + px * offset;
+                    ty = worldY + py * offset;
+                }
+
+                // Add a bit of "doodle jitter"
                 const jitter = 15;
-                let tx = worldX + px * offset + (Math.random() * jitter - jitter/2);
-                let ty = worldY + py * offset + (Math.random() * jitter - jitter/2);
+                tx += (Math.random() * jitter - jitter / 2);
+                ty += (Math.random() * jitter - jitter / 2);
 
                 // Validate target point (avoid barriers)
                 const tr = Math.floor(ty / this.gridSize);
@@ -3611,7 +3847,7 @@ export class World {
 
     addPlayerResource(playerId, type, amount, target) {
         if (!this.playerResources[playerId]) return;
-        
+
         const pool = this.playerResources[playerId];
         if (type === 'ink') {
             pool.ink += amount;
@@ -3669,8 +3905,8 @@ class AIController {
             const ink = world.resources
                 .filter(r => r.type === 'ink_splat' && r.amount > 0)
                 .sort((a, b) => {
-                    const distA = Math.sqrt((a.x - doodle.x)**2 + (a.y - doodle.y)**2);
-                    const distB = Math.sqrt((b.x - doodle.x)**2 + (b.y - doodle.y)**2);
+                    const distA = Math.sqrt((a.x - doodle.x) ** 2 + (a.y - doodle.y) ** 2);
+                    const distB = Math.sqrt((b.x - doodle.x) ** 2 + (b.y - doodle.y) ** 2);
                     return distA - distB;
                 })[0];
 
@@ -3696,7 +3932,7 @@ class AIController {
             const dist = 300;
             const bx = myCastle.x + Math.cos(angle) * dist;
             const by = myCastle.y + Math.sin(angle) * dist;
-            
+
             resources.ink -= 200;
             const dojo = new Dojo(this.game, bx, by, this.playerId, world.nextUnitId++);
             dojo.isUnderConstruction = true;
@@ -3729,4 +3965,3 @@ class AIController {
         }
     }
 }
-

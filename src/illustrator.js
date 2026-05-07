@@ -149,13 +149,20 @@ export class Illustrator {
         document.getElementById('tool-weight').oninput = (e) => this.atrament.weight = parseFloat(e.target.value);
 
         // Scroll wheel for brush weight
-        this.canvas.onwheel = (e) => {
-            e.preventDefault();
-            const delta = e.deltaY > 0 ? -1 : 1;
-            const newWeight = Math.min(20, Math.max(1, this.atrament.weight + delta));
-            this.atrament.weight = newWeight;
-            document.getElementById('tool-weight').value = newWeight;
-        };
+        const illustratorPage = document.getElementById('illustrator-page');
+        if (illustratorPage) {
+            illustratorPage.addEventListener('wheel', (e) => {
+                // Only handle if illustrator is visible
+                if (illustratorPage.style.display === 'none') return;
+                
+                e.preventDefault();
+                const delta = e.deltaY > 0 ? 1 : -1; // Flipped based on user feedback
+                const weightInput = document.getElementById('tool-weight');
+                const newWeight = Math.min(20, Math.max(1, parseFloat(weightInput.value) + delta));
+                this.atrament.weight = newWeight;
+                weightInput.value = newWeight;
+            }, { passive: false });
+        }
 
         // Animation Settings
         document.getElementById('preview-speed').oninput = (e) => {

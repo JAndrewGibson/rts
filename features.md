@@ -45,6 +45,12 @@ This document tracks the features currently implemented in the codebase. **Futur
 - [x] **Path Visualization**: Real-time rendering of unit paths and destination targets (visible only to the owner).
 - [x] **Task Queuing (Shift-Click)**: Ability to chain multiple move/attack commands to be completed sequentially.
 - [x] **Control Groups (Squads)**: Standard RTS squad management (Ctrl+0-9 to assign, 0-9 to select).
+- [x] **Advanced Combat AI**:
+  - [x] **Auto-Retaliation**: Units automatically fight back against their first attacker.
+  - [x] **Area Commands**:
+    - [x] **Attack Areas (Ctrl + Right-Drag)**: Persistent patrol/guard zones with auto-engagement.
+    - [x] **Targeting Areas (Right-Drag)**: Smart unit distribution (e.g., 2v1) for mass-targeting.
+- [x] **Doodle Wiki**: In-game field manual for units, buildings, and mechanics.
 
 ## Infrastructure
 - [x] **MIME-Correct Server**: `serve.py` custom Python server to handle Windows `.js` module issues and disable browser caching.
@@ -53,5 +59,5 @@ This document tracks the features currently implemented in the codebase. **Futur
 ## Multiplayer & Deployment Roadmap
 - [x] **Authoritative Server**: Migrating logic to Flask to prevent cheating.
 - [x] **Real-Time State (SocketIO)**: Real-time syncing for 8 players.
-- [ ] **Blueprint Deployment**: `render.yaml` for one-click deployment to Render.
-- [ ] **Lobby System**: Matchmaking and room management.
+- [x] **Blueprint Deployment**: `render.yaml` for one-click deployment to Render.
+- [x] **Lobby System**: Matchmaking and room management.

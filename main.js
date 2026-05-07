@@ -39,7 +39,7 @@ class DoodleRTS {
                 protractor: { tier: 3, hp: 400, damage: 45, speed: 70, range: 350, cooldown: 3.0, defense: 15, cost: { ink: 600, graphite: 200, whiteout: 100 }, description: "Long-range siege engine. Heavy damage." },
                 piousDoodle: { tier: 3, hp: 80, damage: 4, speed: 160, range: 60, cooldown: 1.2, cost: { ink: 200, whiteout: 50 }, description: "Religious unit. Prays for office supplies at The Rip." },
                 theRip: { tier: 3, hp: 800, buildTime: 40, cost: { ink: 300, graphite: 100 }, description: "Sacred building. Trains Pious Doodles and provides a place for prayer." },
-                
+
                 // Tier 3 Specialization Buildings
                 draftingTable: { tier: 3, hp: 800, buildTime: 45, cost: { ink: 400, graphite: 200, whiteout: 100 }, description: "Geometricist Specialization. Trains Compass Guardians." },
                 inkReservoir: { tier: 3, hp: 800, buildTime: 45, cost: { ink: 400, graphite: 200, whiteout: 100 }, description: "Surrealist Specialization. Trains Charcoal Smudgers and Fountain Pens." },
@@ -191,10 +191,10 @@ class DoodleRTS {
 
         // Main Menu navigation
         if (hostMenuBtn) {
-        hostMenuBtn.onclick = () => {
+            hostMenuBtn.onclick = () => {
                 const username = prompt("Enter your name as Host:", "Illustrator");
                 if (username === null) return; // Cancelled
-                
+
                 const settings = {
                     maxPlayers: 8,
                     maxUnits: 100,
@@ -323,10 +323,10 @@ class DoodleRTS {
     }
 
     showPage(pageId) {
-        document.querySelectorAll('.menu-overlay').forEach(p => p.style.display = 'none');
+        document.querySelectorAll('.menu-overlay:not(#desktop-warning)').forEach(p => p.style.display = 'none');
         const target = document.getElementById(pageId);
         if (target) target.style.display = 'flex';
-        
+
         // Ensure desktop warning stays on top if visible
         this.checkScreenSize();
     }
@@ -334,8 +334,8 @@ class DoodleRTS {
     checkScreenSize() {
         const warning = document.getElementById('desktop-warning');
         if (!warning) return;
-        
-        if (window.innerWidth < 1024) {
+
+        if (window.innerWidth < 1260) {
             warning.style.display = 'flex';
         } else {
             // Only hide if it's currently showing
@@ -481,6 +481,26 @@ class DoodleRTS {
                     <p>The <strong>Oil-based Ink</strong> upgrade in the Castle makes your units immune to the slowing effects of tape, allowing you to move freely through your own traps or bypass the enemy's.</p>
                 `;
                 break;
+            case 'mech_area':
+                html = `
+                    <h3 class="scribble">Area Commands</h3>
+                    <p>Advanced commanders use areas to automate their forces and coordinate strikes.</p>
+                    <h4 class="scribble">Attack Areas (Ctrl + Right-Drag)</h4>
+                    <p>By holding <strong>Ctrl</strong> and dragging a box with the <strong>Right Mouse Button</strong>, you designate a Guard Zone.</p>
+                    <ul>
+                        <li>Units move to the center of the zone and patrol randomly within its bounds.</li>
+                        <li>They automatically engage any enemy that enters the zone.</li>
+                        <li>If an enemy leaves the zone, units will drop the pursuit and return to patrolling.</li>
+                        <li><strong>Note:</strong> Creating a new Attack Area will automatically remove your previous one.</li>
+                    </ul>
+                    <h4 class="scribble">Targeting Areas (Right-Drag)</h4>
+                    <p>Dragging a box with the <strong>Right Mouse Button</strong> (without Ctrl) creates a Targeting Zone.</p>
+                    <ul>
+                        <li>Selected units are distributed equally among all enemies found in the box.</li>
+                        <li>This ensures your army doesn't waste firepower by over-committing to a single target in a swarm.</li>
+                    </ul>
+                `;
+                break;
         }
 
         content.innerHTML = html;
@@ -578,14 +598,6 @@ class DoodleRTS {
         `;
     }
 
-    checkScreenSize() {
-        const warning = document.getElementById('desktop-warning');
-        if (window.innerWidth < 1024) {
-            warning.style.display = 'flex';
-        } else {
-            warning.style.display = 'none';
-        }
-    }
 
     populateBalanceGrid(grid) {
         grid.innerHTML = '';
@@ -701,7 +713,7 @@ class DoodleRTS {
         this.socket.on('return_to_lobby', (data) => {
             // Stop the game engine if it's running
             if (this.engine) this.engine.stop();
-            
+
             // Re-show the lobby with current room state
             if (data && data.room) {
                 this.showLobby(data.room);
@@ -726,11 +738,11 @@ class DoodleRTS {
     showLobby(room) {
         console.log('Showing lobby for room:', this.roomCode);
         this.showPage('lobby-page');
-        
+
         // Use a small timeout to ensure DOM is ready
         const codeElem = document.getElementById('lobby-room-code');
         if (codeElem) codeElem.textContent = this.roomCode;
-        
+
         this.updateLobbyUI(room);
     }
 
@@ -752,7 +764,7 @@ class DoodleRTS {
         slots.forEach((slot, index) => {
             const card = document.createElement('div');
             card.className = `player-card slot-${index}`;
-            
+
             if (slot.type === 'player') {
                 const player = players[slot.playerId];
                 if (!player) return; // Should not happen
@@ -812,7 +824,7 @@ class DoodleRTS {
                     ` : ''}
                 `;
             }
-            
+
             playerList.appendChild(card);
         });
 
@@ -871,7 +883,7 @@ class DoodleRTS {
         }
 
         menu.style.display = show ? 'flex' : 'none';
-        
+
         if (show) {
             // Update quit button visibility for host
             const quitBtn = document.getElementById('btn-pause-quit');

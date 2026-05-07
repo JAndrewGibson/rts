@@ -15,7 +15,7 @@
 }
 
 .scribble {
-    font-family: 'Handwritten', var(--font-main) !important;
+    font-family: 'Handwritten', var(--font-main);
 }
 
 /* Custom Scrollbar for Notepad look */
@@ -41,7 +41,11 @@
 }
 
 body {
-    background-color: var(--bg-color);
+    background-color: #2c1a0b; /* Dark wood fallback */
+    background-image: url('assets/wood-texture.jpg');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
     color: var(--text-color);
     font-family: var(--font-main);
     overflow: hidden;
@@ -57,8 +61,9 @@ body {
 }
 
 #game-canvas {
-    background-color: #000;
+    background-color: transparent;
     display: block;
+    margin: auto;
 }
 
 /* HUD Styles - Sketchy/Hand-drawn look */
