@@ -14,7 +14,18 @@ services:
           type: redis
           name: doodle-rts-redis
           property: connectionString
+      - key: DATABASE_URL
+        fromService:
+          type: database
+          name: doodle-rts-db
+          property: connectionString
 
   - type: redis
     name: doodle-rts-redis
     ipAllowList: [] # Only allow internal connections
+
+  - type: database
+    name: doodle-rts-db
+    databaseName: rts_marketplace
+    user: rts_admin
+    plan: free # Change if needed

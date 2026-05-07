@@ -19,7 +19,8 @@
                 <button id="btn-host-menu" class="btn-menu btn-start">host game</button>
                 <button id="btn-join-menu" class="btn-menu">join game</button>
                 <button id="btn-illustrator" class="btn-menu">illustrator</button>
-                <button id="btn-tech-tree" class="btn-menu">tech tree</button>
+                <button id="btn-marketplace" class="btn-menu">marketplace</button>
+                <button id="btn-tech-tree" class="btn-menu">doodle wiki</button>
                 <button id="btn-balance" class="btn-menu">balance stats</button>
                 <button id="btn-credits" class="btn-menu">credits</button>
             </div>
@@ -39,6 +40,7 @@
                         <h4 class="scribble">Categories</h4>
                         <ul style="list-style: none; padding: 0; margin: 0;">
                             <li><a href="#" class="wiki-link" data-page="index">Welcome</a></li>
+                            <li><a href="#" class="wiki-link" data-page="how_to_play">How to Play</a></li>
                             <li><a href="#" class="wiki-link" data-page="tree">Dependency Map</a></li>
                             <li style="margin-top: 10px;"><strong class="scribble">Units</strong></li>
                             <li><a href="#" class="wiki-link" data-page="unit_doodle">Simple Doodle</a></li>
@@ -218,6 +220,8 @@
                             style="font-size: 1.1rem; padding: 0.6rem 1.2rem;">import pack</button>
                         <button id="btn-pack-export" class="btn-menu btn-start"
                             style="font-size: 1.1rem; padding: 0.6rem 1.2rem;">export pack</button>
+                        <button id="btn-add-to-marketplace" class="btn-menu btn-start"
+                            style="font-size: 1.1rem; padding: 0.6rem 1.2rem; background: #6f4e37; color: white;">Add to Marketplace</button>
                         <button id="btn-pack-clear-all" class="btn-menu"
                             style="font-size: 1.1rem; padding: 0.6rem 1.2rem; border-color: #e74c3c; color: #e74c3c; box-shadow: 6px 6px 0px #e74c3c;">clear
                             all</button>
@@ -394,6 +398,36 @@
                 <div class="menu-buttons" style="margin-top: 30px; gap: 1rem;">
                     <button id="btn-victory-rematch" class="btn-menu btn-start">rematch</button>
                     <button onclick="window.location.reload()" class="btn-menu">main menu</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Artists Marketplace -->
+        <div id="marketplace-page" class="menu-overlay" style="display: none;">
+            <div class="setup-content" style="max-width: 1200px; width: 95%; height: 90vh; display: flex; flex-direction: column;">
+                <div class="marketplace-header" style="text-align: center; margin-bottom: 20px;">
+                    <h2 class="scribble" style="font-size: 4rem; margin-bottom: 10px;">The Marketplace</h2>
+                    <div class="marketplace-tabs" style="display: flex; justify-content: center; gap: 20px; margin-bottom: 15px;">
+                        <button id="tab-community" class="btn-menu active" style="font-size: 1rem; padding: 10px 20px;">Community Art</button>
+                        <button id="tab-in-game" class="btn-menu" style="font-size: 1rem; padding: 10px 20px;">My In-Game</button>
+                    </div>
+                    <div id="marketplace-filters" style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
+                        <!-- Filters will be injected here -->
+                    </div>
+                </div>
+
+                <div id="marketplace-grid-container" style="flex-grow: 1; overflow-y: auto; padding: 20px; border: 2px solid var(--text-color); border-radius: 8px; background: rgba(255,255,255,0.5);">
+                    <div id="marketplace-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 25px;">
+                        <!-- Asset cards will be injected here -->
+                    </div>
+                    <div id="marketplace-empty" style="display: none; text-align: center; padding: 50px;">
+                        <h3 class="scribble" style="font-size: 2rem; opacity: 0.5;">No art found here yet...</h3>
+                        <p class="scribble">Be the first to share your drawings!</p>
+                    </div>
+                </div>
+
+                <div class="menu-buttons" style="margin-top: 20px; flex-shrink: 0;">
+                    <button id="btn-marketplace-back" class="btn-menu">Back to Menu</button>
                 </div>
             </div>
         </div>

@@ -2,8 +2,11 @@ from gevent import monkey
 monkey.patch_all()
 
 import os
-from flask import Flask, render_template, send_from_directory, request
+from flask import Flask, render_template, send_from_directory, request, jsonify
 from flask_socketio import SocketIO, emit, join_room, leave_room
+from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
+import json
 import mimetypes
 import random
 import string
@@ -19,6 +22,41 @@ except ImportError as e:
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'doodle-rts-secret!')
+
+# Database Configuration
+# Fallback to sqlite for local dev if no DATABASE_URL is provided, but user wants shared db
+# so we should encourage setting DATABASE_URL locally.
+database_url = os.environ.get('DATABASE_URL')
+if database_url and database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql://", 1)
+
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url or 'sqlite:///marketplace.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+db = SQLAlchemy(app)
+
+# Marketplace Models
+class MarketplaceAsset(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    asset_type = db.Column(db.String(50), nullable=False)
+    creator_name = db.Column(db.String(100), nullable=False)
+    data = db.Column(db.Text, nullable=False) # JSON string of all actions
+    likes = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'asset_type': self.asset_type,
+            'creator_name': self.creator_name,
+            'data': json.loads(self.data),
+            'likes': self.likes,
+            'created_at': self.created_at.isoformat()
+        }
+
+with app.app_context():
+    db.create_all()
+
 
 # Use Redis if available (for Render deployment)
 redis_url = os.environ.get('REDIS_URL')
@@ -61,6 +99,44 @@ def add_header(response):
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
     return response
+
+# Marketplace API
+@app.route('/api/marketplace/assets', methods=['GET'])
+def get_marketplace_assets():
+    asset_type = request.args.get('type')
+    query = MarketplaceAsset.query
+    
+    if asset_type:
+        query = query.filter_by(asset_type=asset_type)
+    
+    # Sort by likes then by date
+    assets = query.order_by(MarketplaceAsset.likes.desc(), MarketplaceAsset.created_at.desc()).all()
+    return jsonify([a.to_dict() for a in assets])
+
+@app.route('/api/marketplace/share', methods=['POST'])
+def share_asset():
+    data = request.json
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    new_asset = MarketplaceAsset(
+        asset_type=data.get('asset_type'),
+        creator_name=data.get('creator_name', 'Anonymous Illustrator'),
+        data=json.dumps(data.get('data')),
+        created_at=datetime.utcnow()
+    )
+    
+    db.session.add(new_asset)
+    db.session.commit()
+    
+    return jsonify({'success': True, 'asset': new_asset.to_dict()})
+
+@app.route('/api/marketplace/like/<int:asset_id>', methods=['POST'])
+def like_asset(asset_id):
+    asset = MarketplaceAsset.query.get_or_404(asset_id)
+    asset.likes += 1
+    db.session.commit()
+    return jsonify({'success': True, 'likes': asset.likes})
 
 @socketio.on('connect')
 def handle_connect():

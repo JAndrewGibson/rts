@@ -14,6 +14,15 @@ export class Illustrator {
             { id: 'pirate', name: 'Pirate', type: 'unit', category: 'Units', actions: ['idle', 'walk', 'attack', 'death'] },
             { id: 'doodle', name: 'Doodle', type: 'unit', category: 'Units', actions: ['idle', 'walk', 'attack', 'build', 'harvest', 'death'] },
             { id: 'vat', name: 'Collection Vat', type: 'unit', category: 'Units', actions: ['idle', 'walk', 'death'] },
+            { id: 'protractor', name: 'Protractor', type: 'unit', category: 'Units', actions: ['idle', 'walk', 'attack', 'death'] },
+            { id: 'piousDoodle', name: 'Pious Doodle', type: 'unit', category: 'Units', actions: ['idle', 'walk', 'pray', 'death'] },
+            { id: 'stickman', name: 'Stickman Swarm', type: 'unit', category: 'Units', actions: ['idle', 'walk', 'attack', 'death'] },
+            { id: 'paperplane', name: 'Paper Plane', type: 'unit', category: 'Units', actions: ['idle', 'walk', 'attack', 'death'] },
+            { id: 'compassGuardian', name: 'Compass Guardian', type: 'unit', category: 'Units', actions: ['idle', 'walk', 'shield', 'death'] },
+            { id: 'charcoalSmudger', name: 'Charcoal Smudger', type: 'unit', category: 'Units', actions: ['idle', 'walk', 'smudge', 'death'] },
+            { id: 'fountainPen', name: 'Fountain Pen', type: 'unit', category: 'Units', actions: ['idle', 'walk', 'gallop', 'death'] },
+            { id: 'whiteoutTanker', name: 'Whiteout Tanker', type: 'unit', category: 'Units', actions: ['idle', 'walk', 'spray', 'death'] },
+            { id: 'solventVat', name: 'Solvent Vat', type: 'unit', category: 'Units', actions: ['idle', 'walk', 'dissolve', 'death'] },
 
             // Buildings
             { id: 'castle', name: 'Home Castle', type: 'building', category: 'Buildings', actions: ['idle', 'construction', 'death'] },
@@ -21,11 +30,33 @@ export class Illustrator {
             { id: 'saloon', name: 'Saloon', type: 'building', category: 'Buildings', actions: ['idle', 'construction', 'death'] },
             { id: 'docks', name: 'Docks', type: 'building', category: 'Buildings', actions: ['idle', 'construction', 'death'] },
             { id: 'furnace', name: 'Furnace', type: 'building', category: 'Buildings', actions: ['idle', 'construction', 'death'] },
+            { id: 'sharpener', name: 'Sharpener', type: 'building', category: 'Buildings', actions: ['idle', 'construction', 'death'] },
+            { id: 'theRip', name: 'The Rip', type: 'building', category: 'Buildings', actions: ['idle', 'construction', 'death'] },
             { id: 'coffeeShop', name: 'Coffee Shop', type: 'building', category: 'Buildings', actions: ['idle', 'construction', 'death'] },
+            { id: 'draftingTable', name: 'Drafting Table', type: 'building', category: 'Buildings', actions: ['idle', 'construction', 'death'] },
+            { id: 'inkReservoir', name: 'Ink Reservoir', type: 'building', category: 'Buildings', actions: ['idle', 'construction', 'death'] },
+            { id: 'correctionLab', name: 'Correction Lab', type: 'building', category: 'Buildings', actions: ['idle', 'construction', 'death'] },
 
             // UI / Resources
             { id: 'ink_splat', name: 'Ink Splat', type: 'resource', category: 'Resources/UI', actions: ['idle'] },
+            { id: 'red_ink_splat', name: 'Red Ink Splat', type: 'resource', category: 'Resources/UI', actions: ['idle'] },
+            { id: 'whiteout_splat', name: 'Whiteout Splat', type: 'resource', category: 'Resources/UI', actions: ['idle'] },
             { id: 'coal_mine', name: 'Coal Mine', type: 'resource', category: 'Resources/UI', actions: ['idle'] },
+            { id: 'shavings', name: 'Graphite Shavings', type: 'resource', category: 'Resources/UI', actions: ['idle'] },
+            { id: 'coffee_splat', name: 'Coffee Splat', type: 'resource', category: 'Resources/UI', actions: ['idle'] },
+            { id: 'mistake', name: 'The Mistake', type: 'resource', category: 'Resources/UI', actions: ['idle'] },
+            { id: 'bottle', name: 'Eraser Bottle', type: 'resource', category: 'Resources/UI', actions: ['idle'] },
+            { id: 'splatter', name: 'Death Splatter', type: 'resource', category: 'Resources/UI', actions: ['idle'] },
+            
+            // Environmental Objects
+            { id: 'ink_cloud', name: 'Ink Cloud', type: 'object', category: 'Objects', actions: ['idle'] },
+            { id: 'smudge_cloud', name: 'Smudge Cloud', type: 'object', category: 'Objects', actions: ['idle'] },
+            { id: 'tape_tile', name: 'Tape Tile', type: 'object', category: 'Objects', actions: ['idle'] },
+
+            // Projectiles
+            { id: 'projectile_bullet', name: 'Bullet', type: 'projectile', category: 'Projectiles', actions: ['idle'] },
+            { id: 'projectile_beam', name: 'Siege Beam', type: 'projectile', category: 'Projectiles', actions: ['idle'] },
+            { id: 'projectile_bomb', name: 'Paper Bomb', type: 'projectile', category: 'Projectiles', actions: ['idle'] },
 
             // Bonus
             { id: 'favicon', name: 'Browser Favicon', type: 'bonus', category: 'Bonus', actions: ['idle'] },
@@ -185,6 +216,11 @@ export class Illustrator {
         document.getElementById('btn-pack-import').onclick = () => this.importPack();
         document.getElementById('btn-pack-apply').onclick = () => this.applyToGame();
         document.getElementById('btn-pack-clear-all').onclick = () => this.clearAllData();
+        
+        const btnShare = document.getElementById('btn-add-to-marketplace');
+        if (btnShare) {
+            btnShare.onclick = () => this.shareToMarketplace();
+        }
 
         // Save on every stroke
         this.atrament.addEventListener('dirty', () => {
@@ -377,6 +413,19 @@ export class Illustrator {
 
         localStorage.setItem('doodle_art_packs', JSON.stringify(this.packs));
         this.updateThumbnails();
+
+        // Debounced reload of world assets
+        this.triggerWorldReload();
+    }
+
+    triggerWorldReload() {
+        if (!this.game || !this.game.world) return;
+
+        if (this.reloadTimeout) clearTimeout(this.reloadTimeout);
+        this.reloadTimeout = setTimeout(() => {
+            const assetKey = `${this.currentAsset}_${this.currentAction}`;
+            this.game.world.loadCustomPacks(assetKey);
+        }, 500); // Wait for 500ms of inactivity before reprocessing
     }
 
     addFrame() {
@@ -425,9 +474,14 @@ export class Illustrator {
         if (frames.length <= 1) return;
 
         frames.splice(index, 1);
-        this.currentFrame = Math.max(0, this.currentFrame - 1);
         localStorage.setItem('doodle_art_packs', JSON.stringify(this.packs));
         this.loadFrame(this.currentFrame);
+
+        // Immediate reload for removals
+        if (this.game && this.game.world) {
+            const assetKey = `${this.currentAsset}_${this.currentAction}`;
+            this.game.world.loadCustomPacks(assetKey);
+        }
     }
 
     updateOnionSkin() {
@@ -555,6 +609,58 @@ export class Illustrator {
                 this.game.world.customAssets = {}; // Clear engine cache
             }
             alert("All art data cleared.");
+        }
+    }
+
+    async shareToMarketplace() {
+        const asset = this.assets.find(a => a.id === this.currentAsset);
+        if (!asset) return;
+
+        // Check if we have at least one frame for any action
+        let hasContent = false;
+        const unitData = {};
+        
+        asset.actions.forEach(action => {
+            const key = `${asset.id}_${action}`;
+            const frames = this.packs[this.currentPack][key] || [];
+            if (frames.length > 0) {
+                hasContent = true;
+                unitData[key] = frames;
+            }
+        });
+
+        if (!hasContent) {
+            alert("Please draw something before sharing!");
+            return;
+        }
+
+        const creatorName = prompt("Enter your artist name:", localStorage.getItem('doodle_artist_name') || "Anonymous Illustrator");
+        if (creatorName === null) return;
+        localStorage.setItem('doodle_artist_name', creatorName);
+
+        try {
+            const response = await fetch('/api/marketplace/share', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    asset_type: asset.id,
+                    creator_name: creatorName,
+                    data: unitData
+                })
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                alert("Masterpiece shared successfully! Check the Marketplace to see it.");
+                if (this.game.marketplace) {
+                    this.game.marketplace.loadAssets();
+                }
+            } else {
+                alert("Failed to share masterpiece: " + (result.error || "Unknown error"));
+            }
+        } catch (err) {
+            console.error('Failed to share to marketplace:', err);
+            alert("Error connecting to marketplace server.");
         }
     }
 

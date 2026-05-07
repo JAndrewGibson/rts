@@ -93,11 +93,14 @@ export class Input {
                 this.mouse.panStart = null;
             } else if (e.button === 2) {
                 if (this.mouse.dragStart) {
-                    if (dist > 5) {
+                    if (dist > 20) {
                         if (e.ctrlKey) {
                             this.game.world.assignAttackArea(worldStart, worldEnd);
                         } else {
-                            this.game.world.commandTargetArea(worldStart, worldEnd);
+                            // If commandTargetArea returns false (no enemies), fallback to normal move
+                            if (!this.game.world.commandTargetArea(worldStart, worldEnd)) {
+                                this.handleRightClick(worldEnd.x, worldEnd.y, e.shiftKey);
+                            }
                         }
                     } else {
                         this.handleRightClick(worldEnd.x, worldEnd.y, e.shiftKey);

@@ -100,12 +100,12 @@ body {
 }
 
 #bottom-bar {
-    bottom: 45px; /* Moved up to make room for tooltip */
+    bottom: 45px;
     left: 50%;
     transform: translateX(-50%);
     width: 80%;
     max-width: 1000px;
-    height: 140px;
+    height: 160px; /* Slightly taller for grid */
     display: flex;
     gap: 20px;
 }
@@ -236,6 +236,15 @@ body {
     display: flex;
     flex-direction: column;
     justify-content: center;
+    position: relative;
+}
+
+#actions-panel {
+    display: grid;
+    grid-template-columns: repeat(5, 55px);
+    grid-template-rows: repeat(2, 55px);
+    gap: 8px;
+    align-content: center;
 }
 
 .unit-card {
@@ -256,18 +265,18 @@ body {
 }
 
 .queue-item {
-    width: 34px;
-    height: 34px;
-    border: 2px solid var(--text-color);
-    border-radius: 4px;
+    width: 28px;
+    height: 28px;
+    border: 1.5px solid var(--text-color);
+    border-radius: 3px;
     position: relative;
     overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
-    font-size: 1.1rem;
-    box-shadow: 2px 2px 0 rgba(0,0,0,0.1);
+    font-size: 0.9rem;
+    box-shadow: 1px 1px 0 rgba(0,0,0,0.1);
     background: #95a5a6;
 }
 
@@ -389,14 +398,59 @@ body {
     box-shadow: 8px 8px 0px var(--accent-color);
 }
 
-.btn-danger {
-    border-color: var(--secondary-color);
-    color: var(--secondary-color);
-    box-shadow: 6px 6px 0px var(--secondary-color);
-}
-
 .btn-danger:hover {
     box-shadow: 8px 8px 0px var(--secondary-color);
+}
+
+.btn-action {
+    width: 55px;
+    height: 55px;
+    background: white;
+    border: 2px solid var(--text-color);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.1s;
+    box-shadow: 3px 3px 0px var(--text-color);
+    padding: 2px;
+    position: relative;
+}
+
+.btn-action:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 4px 4px 0px var(--text-color);
+    background: #f8f9fa;
+}
+
+.btn-action:active {
+    transform: translate(1px, 1px);
+    box-shadow: 1px 1px 0px var(--text-color);
+}
+
+.btn-action .icon {
+    font-size: 1.4rem;
+    line-height: 1;
+}
+
+.btn-action .label {
+    font-size: 0.6rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    text-align: center;
+    line-height: 1.1;
+    margin-top: 2px;
+    word-break: break-all;
+}
+
+.btn-action .hotkey {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    font-size: 0.5rem;
+    font-weight: bold;
+    opacity: 0.5;
 }
 
 .credits {
@@ -874,4 +928,133 @@ body {
     box-shadow: 8px 8px 0px rgba(0,0,0,0.3) !important;
     border: 3px solid white !important;
     font-weight: 800;
+}
+
+/* Marketplace Styles */
+.marketplace-tabs .btn-menu {
+    border-color: #777;
+    color: #777;
+    box-shadow: 4px 4px 0 #777;
+}
+
+.marketplace-tabs .btn-menu.active {
+    border-color: var(--secondary-color);
+    color: var(--secondary-color);
+    box-shadow: 4px 4px 0 var(--secondary-color);
+    transform: translate(-2px, -2px);
+}
+
+.marketplace-card {
+    background: white;
+    border: 2px solid var(--text-color);
+    border-radius: 8px;
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: transform 0.2s, box-shadow 0.2s;
+    position: relative;
+    box-shadow: 4px 4px 0 var(--text-color);
+}
+
+.marketplace-card:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0 var(--text-color);
+}
+
+.marketplace-card-preview {
+    width: 100%;
+    aspect-ratio: 1;
+    background: var(--bg-color);
+    border: 1px solid #eee;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.marketplace-card-preview canvas {
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+}
+
+.marketplace-card-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.marketplace-card-name {
+    font-weight: 800;
+    font-size: 1.1rem;
+    color: var(--text-color);
+}
+
+.marketplace-card-creator {
+    font-size: 0.8rem;
+    opacity: 0.6;
+    font-style: italic;
+}
+
+.marketplace-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 5px;
+}
+
+.marketplace-like-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: color 0.2s;
+}
+
+.marketplace-like-btn:hover {
+    color: #e74c3c;
+}
+
+.marketplace-like-btn.liked {
+    color: #e74c3c;
+}
+
+.marketplace-btn-replace {
+    font-size: 0.8rem;
+    padding: 5px 12px;
+    background: var(--secondary-color);
+    color: white;
+    border: 2px solid var(--text-color);
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+    box-shadow: 2px 2px 0 var(--text-color);
+}
+
+.marketplace-btn-replace:active {
+    transform: translate(1px, 1px);
+    box-shadow: 1px 1px 0 var(--text-color);
+}
+
+.marketplace-filter-btn {
+    font-size: 0.7rem;
+    padding: 4px 10px;
+    border: 1px solid #ccc;
+    background: white;
+    border-radius: 15px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.marketplace-filter-btn.active {
+    background: var(--text-color);
+    color: white;
+    border-color: var(--text-color);
+}
+
+#marketplace-page .setup-content {
+    max-width: 1200px;
 }

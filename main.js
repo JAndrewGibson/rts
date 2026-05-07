@@ -3,6 +3,7 @@ import { Input } from './src/input.js?v=2';
 import { UI } from './src/ui.js?v=2';
 import { World } from './src/world.js?v=2';
 import { Illustrator } from './src/illustrator.js?v=2';
+import { Marketplace } from './src/marketplace.js?v=2';
 
 class DoodleRTS {
     constructor() {
@@ -113,6 +114,7 @@ class DoodleRTS {
             this.input = new Input(this);
             this.world = new World(this);
             this.engine = new Engine(this);
+            this.marketplace = new Marketplace(this);
 
             // Try to initialize illustrator but don't crash everything if it fails
             try {
@@ -360,7 +362,7 @@ class DoodleRTS {
                     <div style="display: flex; gap: 20px; margin-top: 20px;">
                         <div style="flex: 1; border: 2px dashed var(--text-color); padding: 15px;">
                             <h4 class="scribble">Getting Started</h4>
-                            <p>Build a <strong>Home Castle</strong> to begin producing Doodles. Use them to gather Ink and Shavings to expand your base.</p>
+                            <p>Check out the <strong>How to Play</strong> section to learn the basics of commanding your ink army.</p>
                         </div>
                         <div style="flex: 1; border: 2px dashed var(--text-color); padding: 15px;">
                             <h4 class="scribble">Strategic Goal</h4>
@@ -368,6 +370,40 @@ class DoodleRTS {
                         </div>
                     </div>
                     <p style="margin-top: 20px;">Use the sidebar to explore units, buildings, and advanced mechanics.</p>
+                `;
+                break;
+
+            case 'how_to_play':
+                html = `
+                    <h3 class="scribble">How to Play</h3>
+                    <p>Doodle RTS is a game of strategy, ink, and geometry. Your goal is to destroy all enemy <strong>Home Castles</strong>.</p>
+                    
+                    <h4 class="scribble">1. Basic Controls</h4>
+                    <ul>
+                        <li><strong>Selection</strong>: Left-Click a unit or Left-Drag to select a group.</li>
+                        <li><strong>Movement/Attack</strong>: Right-Click on the paper to move, or Right-Click an enemy to attack.</li>
+                        <li><strong>Camera</strong>: Use <strong>WASD</strong> or <strong>Arrow Keys</strong> to pan. Use the <strong>Scroll Wheel</strong> to zoom in and out.</li>
+                        <li><strong>Action Panel</strong>: When a building or unit is selected, use the buttons in the bottom-right to train units or research upgrades.</li>
+                    </ul>
+
+                    <h4 class="scribble">2. The Economy</h4>
+                    <p>Everything costs <strong>Ink</strong>. To get it:</p>
+                    <ol>
+                        <li>Produce <strong>Doodles</strong> at your Castle.</li>
+                        <li>Command them to harvest <strong>Ink Splats</strong> on the map.</li>
+                        <li>They will automatically return the ink to your Castle.</li>
+                        <li><strong>Vats</strong> can be used to transport much larger quantities of liquid over long distances.</li>
+                    </ol>
+
+                    <h4 class="scribble">3. Advanced Commands</h4>
+                    <ul>
+                        <li><strong>Patrol/Guard (Ctrl + Right-Drag)</strong>: Create an Attack Area. Units will stay in this zone and automatically engage enemies.</li>
+                        <li><strong>Smart Targeting (Right-Drag)</strong>: Drag a box over a group of enemies to distribute your attackers evenly among them.</li>
+                        <li><strong>Waypoints (Shift + Right-Click)</strong>: Hold Shift to queue up multiple move or attack commands.</li>
+                    </ul>
+
+                    <h4 class="scribble">4. Winning the Match</h4>
+                    <p>Scout the map to find your opponents. Build a diverse army of <strong>Ninjas</strong>, <strong>Cowboys</strong>, and <strong>Pirates</strong> to counter their forces, and establish a <strong>Graphite</strong> chain to unlock the devastating <strong>Protractor</strong> siege engine.</p>
                 `;
                 break;
 
@@ -509,6 +545,7 @@ class DoodleRTS {
 
     getUnitWikiHtml(type, description) {
         const s = this.config.unitStats[type];
+        const costStr = s.cost ? Object.entries(s.cost).map(([res, amt]) => `<strong>${amt}</strong> ${res.charAt(0).toUpperCase() + res.slice(1)}`).join(', ') : 'Free';
         return `
             <h3 class="scribble">${type.toUpperCase()}</h3>
             <div class="stat-box">
@@ -517,7 +554,7 @@ class DoodleRTS {
                 <strong>Defense:</strong> ${s.defense || 0}<br>
                 <strong>Speed:</strong> ${s.speed || 0} | 
                 <strong>Range:</strong> ${s.range || 0} | 
-                <strong>Cost:</strong> ${s.cost || 0} Ink
+                <strong>Cost:</strong> ${costStr}
             </div>
             <p>${description}</p>
             <div style="margin-top: 20px; border-top: 1px dashed #ccc; padding-top: 10px;">
@@ -528,12 +565,13 @@ class DoodleRTS {
 
     getBuildingWikiHtml(type, description) {
         const s = this.config.unitStats[type];
+        const costStr = s.cost ? Object.entries(s.cost).map(([res, amt]) => `<strong>${amt}</strong> ${res.charAt(0).toUpperCase() + res.slice(1)}`).join(', ') : 'Free';
         return `
             <h3 class="scribble">${type.toUpperCase()}</h3>
             <div class="stat-box">
                 <strong>HP:</strong> ${s.hp} | 
                 <strong>Defense:</strong> ${s.defense || 0}<br>
-                <strong>Cost:</strong> ${s.cost} Ink ${s.graphiteCost ? `+ ${s.graphiteCost} Graphite` : ''}
+                <strong>Cost:</strong> ${costStr}
             </div>
             <p>${description}</p>
         `;
@@ -604,25 +642,41 @@ class DoodleRTS {
         for (const [type, stats] of Object.entries(this.config.unitStats)) {
             const card = document.createElement('div');
             card.className = 'setup-item';
-            card.style.background = 'rgba(255,255,255,0.5)';
+            card.style.background = 'rgba(255,255,255,0.8)';
             card.style.padding = '1rem';
             card.style.border = '2px solid var(--text-color)';
+            card.style.borderRadius = '8px';
 
-            let html = `<h4 style="text-transform: uppercase; margin-bottom: 0.5rem;">${type}</h4>`;
+            let html = `<h4 style="text-transform: uppercase; margin-bottom: 0.5rem; border-bottom: 1px solid #ccc;">${type}</h4>`;
             for (const [stat, value] of Object.entries(stats)) {
-                html += `
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem;">
-                        <label style="font-size: 0.8rem;">${stat}</label>
-                        <input type="number" step="${stat === 'cooldown' ? '0.1' : '1'}" 
-                               data-unit="${type}" data-stat="${stat}" 
-                               value="${value}" style="width: 60px; padding: 2px;">
-                    </div>
-                `;
+                if (stat === 'description' || stat === 'tier' || stat === 'actions') continue;
+
+                if (stat === 'cost') {
+                    for (const [res, amount] of Object.entries(value)) {
+                        html += `
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem;">
+                                <label style="font-size: 0.7rem; color: #27ae60; font-weight: bold;">COST_${res.toUpperCase()}</label>
+                                <input type="number" step="1" 
+                                       data-unit="${type}" data-stat="cost" data-res="${res}"
+                                       value="${amount}" style="width: 60px; padding: 2px; border: 1px solid #27ae60;">
+                            </div>
+                        `;
+                    }
+                } else {
+                    html += `
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem;">
+                            <label style="font-size: 0.8rem;">${stat}</label>
+                            <input type="number" step="${stat === 'cooldown' || stat === 'evasion' ? '0.1' : '1'}" 
+                                   data-unit="${type}" data-stat="${stat}" 
+                                   value="${value}" style="width: 60px; padding: 2px;">
+                        </div>
+                    `;
+                }
             }
             // Add DPS preview
             if (stats.damage !== undefined && stats.cooldown !== undefined) {
                 const dps = (stats.damage / stats.cooldown).toFixed(1);
-                html += `<div style="font-size: 0.8rem; font-weight: 800; margin-top: 0.5rem; text-align: right;">DPS: ${dps}</div>`;
+                html += `<div style="font-size: 0.8rem; font-weight: 800; margin-top: 0.5rem; text-align: right; color: #e74c3c;">DPS: ${dps}</div>`;
             }
 
             card.innerHTML = html;
@@ -635,12 +689,19 @@ class DoodleRTS {
         inputs.forEach(input => {
             const unit = input.dataset.unit;
             const stat = input.dataset.stat;
+            const res = input.dataset.res;
             const value = parseFloat(input.value);
-            this.config.unitStats[unit][stat] = value;
+
+            if (stat === 'cost' && res) {
+                if (!this.config.unitStats[unit].cost) this.config.unitStats[unit].cost = {};
+                this.config.unitStats[unit].cost[res] = value;
+            } else {
+                this.config.unitStats[unit][stat] = value;
+            }
         });
         console.log('New Balance Stats Applied:', this.config.unitStats);
 
-        // Re-init world to apply to any current units (though usually we are in menu)
+        // Re-init world to apply to any current units
         if (this.world) this.world.init();
     }
 

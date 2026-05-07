@@ -313,6 +313,50 @@ export class UI {
         element.dataset.fontApplied = "true";
     }
 
+    createActionButton(icon, label, tooltip, cost, onClick, hotkey = null) {
+        const btn = document.createElement('button');
+        btn.className = 'btn-action';
+        
+        const iconDiv = document.createElement('div');
+        iconDiv.className = 'icon';
+        iconDiv.textContent = icon;
+        btn.appendChild(iconDiv);
+        
+        const labelDiv = document.createElement('div');
+        labelDiv.className = 'label';
+        labelDiv.textContent = label;
+        btn.appendChild(labelDiv);
+        
+        if (hotkey) {
+            const hotkeyDiv = document.createElement('div');
+            hotkeyDiv.className = 'hotkey';
+            hotkeyDiv.textContent = hotkey;
+            btn.appendChild(hotkeyDiv);
+        }
+        
+        let costStr = '';
+        if (cost) {
+            costStr = ' (Cost: ' + Object.entries(cost).map(([res, amt]) => `${amt} ${res.toUpperCase()}`).join(', ') + ')';
+        }
+        
+        btn.onmouseover = () => this.showTooltip(tooltip + costStr);
+        btn.onmouseout = () => {
+            if (this.game.world.selection.length === 1) {
+                const primary = this.game.world.selection[0];
+                this.showTooltip(this.game.config.unitStats[primary.type]?.description || '');
+            } else {
+                this.showTooltip('');
+            }
+        };
+        
+        btn.onclick = (e) => {
+            e.stopPropagation();
+            onClick();
+        };
+        
+        return btn;
+    }
+
     updateSelection(selection) {
         const actionsPanel = document.getElementById('actions-panel');
         actionsPanel.innerHTML = '';
@@ -320,31 +364,20 @@ export class UI {
         // Cancel Construction Button
         if (selection.length === 1 && selection[0].isUnderConstruction && selection[0].playerId === this.game.config.localPlayerId) {
             const primary = selection[0];
-            const cancelBtn = document.createElement('button');
-            cancelBtn.className = 'btn-menu scribble';
-            cancelBtn.style.borderColor = '#e74c3c';
-            cancelBtn.style.color = '#e74c3c';
-            
             const stats = this.game.config.unitStats[primary.type];
-            let refundHtml = '';
             const refunds = {};
             for (const [res, amount] of Object.entries(stats.cost || {})) {
-                const refundAmount = Math.floor(amount * (1 - (primary.constructionProgress * 0.5)));
-                refundHtml += `${refundAmount} ${res.toUpperCase()}, `;
-                refunds[res] = refundAmount;
+                refunds[res] = Math.floor(amount * (1 - (primary.constructionProgress * 0.5)));
             }
-            const cleanRefundHtml = refundHtml.slice(0, -2);
             
-            cancelBtn.innerHTML = `Cancel Build<br><small>(Refund ${cleanRefundHtml})</small>`;
-            cancelBtn.onclick = () => {
+            const btn = this.createActionButton('❌', 'Cancel', 'Cancel building construction and get a partial refund.', null, () => {
                 for (const [res, amount] of Object.entries(refunds)) {
                     this.addResource(res, amount);
                 }
-                primary.hp = 0; // This will trigger handleBuildingDeath
-                this.showToast(`Construction Cancelled! Refunded ${cleanRefundHtml}.`);
+                primary.hp = 0;
                 this.updateSelection([]);
-            };
-            actionsPanel.appendChild(cancelBtn);
+            });
+            actionsPanel.appendChild(btn);
         }
 
         this.showTooltip(''); // Clear tooltip on selection change
@@ -363,42 +396,48 @@ export class UI {
                 this.renderDoodleText(this.elements.unitName, "Home Castle");
                 
                 // Show build button
-                const btn = document.createElement('button');
-                btn.className = 'btn-menu scribble';
-                btn.style.fontSize = '0.9rem';
-                btn.style.padding = '0.5rem 1rem';
-                btn.innerHTML = `Draw Doodle<br><small>(100 Ink)</small>`;
-                btn.onclick = () => {
+                const spawnBtn = this.createActionButton('✎', 'Doodle', 'Spawn a new Doodle worker.', { ink: 100 }, () => {
                     this.game.world.spawnSimpleDoodle(primary);
-                };
-                
-                btn.onmouseover = () => this.showTooltip("Spawn a new Doodle worker (100 Ink).");
-                btn.onmouseout = () => this.showTooltip(this.game.config.unitStats.castle.description);
-                
-                actionsPanel.appendChild(btn);
+                }, 'Q');
+                actionsPanel.appendChild(spawnBtn);
+
+                // Add Tech Tier upgrade if available
+                const pId = primary.playerId;
+                const currentTier = this.game.world.playerTiers[pId] || 1;
+                const nextTier = currentTier + 1;
+                const tierData = this.game.config.techTiers[nextTier];
+                if (tierData) {
+                    const tierBtn = this.createActionButton('🏰', tierData.name, tierData.description, tierData.cost, () => {
+                        let canAfford = true;
+                        for (const [res, amount] of Object.entries(tierData.cost)) {
+                            if (!this.resources[res] || this.resources[res] < amount) canAfford = false;
+                        }
+                        if (canAfford) {
+                            this.game.world.upgradeTier(pId);
+                        } else {
+                            this.showToast("Not enough resources for Tier upgrade!", "error");
+                        }
+                    }, 'T');
+                    actionsPanel.appendChild(tierBtn);
+                }
 
                 // Add Oil-based Ink upgrade if not researched
-                const p = primary.playerId;
-                const researched = this.game.world.playerUpgrades[p] && this.game.world.playerUpgrades[p].oil_based_ink;
+                const researched = this.game.world.playerUpgrades[pId] && this.game.world.playerUpgrades[pId].oil_based_ink;
                 if (!researched && !primary.trainingQueue.includes('oil_based_ink')) {
-                    const upBtn = document.createElement('button');
-                    upBtn.className = 'btn-menu scribble';
-                    upBtn.style.fontSize = '0.8rem';
-                    upBtn.innerHTML = `Oil-based Ink<br><small>(800 Ink, 200 Graphite)</small>`;
-                    upBtn.onclick = () => {
+                    const upBtn = this.createActionButton('🧪', 'Oil Ink', 'Makes units immune to Scotch Tape slow effects.', { ink: 800, graphite: 200 }, () => {
                         if (this.resources.ink >= 800 && this.resources.graphite >= 200) {
                             this.resources.ink -= 800;
                             this.resources.graphite -= 200;
                             this.updateResourceDisplay();
                             primary.trainingQueue.push('oil_based_ink');
                         }
-                    };
-                    upBtn.onmouseover = () => this.showTooltip("Late-game upgrade. Makes units immune to Scotch Tape slow effects.");
+                    }, 'U');
                     actionsPanel.appendChild(upBtn);
                 }
 
                 this.addUpgradeButtons(primary, actionsPanel);
-            } else if (primary.type === 'doodle') {
+            }
+ else if (primary.type === 'doodle') {
                 this.renderDoodleText(this.elements.unitName, "SIMPLE DOODLE");
                 
                 // Show cargo info
@@ -411,28 +450,17 @@ export class UI {
                 actionsPanel.appendChild(cargoInfo);
                 
                 // Swarm Button
-                const swarmBtn = document.createElement('button');
-                swarmBtn.className = 'btn-menu scribble';
-                swarmBtn.innerHTML = `Swarm!<br><small>(Split into 3)</small>`;
-                swarmBtn.onclick = () => {
+                const swarmBtn = this.createActionButton('👥', 'Swarm', 'Split this Doodle into 3 weak but fast Stickmen.', null, () => {
                     this.game.world.spawnSwarm(primary.x, primary.y, primary.playerId);
                     primary.hp = 0; // Destroy original
                     this.game.world.selection = [];
                     this.updateSelection([]);
-                };
-                
-                swarmBtn.onmouseover = () => this.showTooltip("Split this Doodle into 3 weak but fast Stickmen.");
-                swarmBtn.onmouseout = () => this.showTooltip(this.game.config.unitStats.doodle.description);
-                
+                }, 'S');
                 actionsPanel.appendChild(swarmBtn);
 
                 // Drop Off Button
                 if (primary.cargo.amount > 0) {
-                    const dropBtn = document.createElement('button');
-                    dropBtn.className = 'btn-menu scribble';
-                    dropBtn.innerHTML = `Drop Off<br><small>(${Math.floor(primary.cargo.amount)} ${primary.cargo.type || ''})</small>`;
-                    dropBtn.onclick = (e) => {
-                        e.stopPropagation();
+                    const dropBtn = this.createActionButton('📦', 'Drop', `Deposit ${Math.floor(primary.cargo.amount)} ${primary.cargo.type || ''}.`, null, () => {
                         const dropOff = primary.findNearestDropPoint(primary.cargo.type);
                         if (dropOff) {
                             const currentTask = primary.taskQueue.shift();
@@ -440,7 +468,7 @@ export class UI {
                             primary.target = null;
                             primary.currentPath = [];
                         }
-                    };
+                    }, 'D');
                     actionsPanel.appendChild(dropBtn);
                 }
 
@@ -472,10 +500,7 @@ export class UI {
                 actionsPanel.appendChild(suppliesInfo);
 
                 // Pray Button
-                const prayBtn = document.createElement('button');
-                prayBtn.className = 'btn-menu scribble';
-                prayBtn.innerHTML = `Pray<br><small>(at The Rip)</small>`;
-                prayBtn.onclick = () => {
+                const prayBtn = this.createActionButton('🙏', 'Pray', 'Commune with the Great Architect at The Rip to manifest office supplies.', null, () => {
                     const theRip = this.game.world.buildings.find(b => b.type === 'theRip' && b.playerId === primary.playerId && !b.isUnderConstruction);
                     if (theRip) {
                         primary.taskQueue = [{ type: 'pray', target: theRip }];
@@ -485,16 +510,12 @@ export class UI {
                     } else {
                         console.log("No completed Rip found!");
                     }
-                };
-                prayBtn.onmouseover = () => this.showTooltip("Commune with the Great Architect at The Rip to manifest office supplies.");
+                }, 'P');
                 actionsPanel.appendChild(prayBtn);
 
                 // Staple Button
                 if (primary.staples > 0) {
-                    const stapleBtn = document.createElement('button');
-                    stapleBtn.className = 'btn-menu scribble';
-                    stapleBtn.innerHTML = `Staple Target<br><small>(Use 1)</small>`;
-                    stapleBtn.onclick = () => {
+                    const stapleBtn = this.createActionButton('📌', 'Staple', 'Pin an enemy unit to the page, completely immobilizing them.', { staples: 1 }, () => {
                         this.game.input.startTargeting((target) => {
                             if (target && target instanceof Unit) {
                                 primary.staples--;
@@ -502,35 +523,26 @@ export class UI {
                                 this.updateSelection([primary]);
                             }
                         });
-                    };
-                    stapleBtn.onmouseover = () => this.showTooltip("Pin an enemy unit to the page, completely immobilizing them.");
+                    }, 'S');
                     actionsPanel.appendChild(stapleBtn);
                 }
 
                 // Tape Button
                 if (primary.tape > 0) {
-                    const tapeBtn = document.createElement('button');
-                    tapeBtn.className = 'btn-menu scribble';
-                    tapeBtn.innerHTML = `Scotch Tape<br><small>(Place 10 tiles)</small>`;
-                    tapeBtn.onclick = () => {
+                    const tapeBtn = this.createActionButton('🎞️', 'Tape', 'Place a line of scotch tape that drastically slows units.', { tape: 1 }, () => {
                         this.game.input.startTargeting((target) => {
-                            // Tape placement uses an angle. For simplicity, we use the direction from primary to click.
                             const angle = Math.atan2(target.y - primary.y, target.x - primary.x);
                             primary.tape--;
                             this.game.world.createTapeLine(target.x, target.y, angle);
                             this.updateSelection([primary]);
-                        }, true); // Is coordinate
-                    };
-                    tapeBtn.onmouseover = () => this.showTooltip("Place a line of scotch tape that drastically slows units.");
+                        }, true);
+                    }, 'T');
                     actionsPanel.appendChild(tapeBtn);
                 }
 
                 // Craft Remover Button
                 if (primary.staples >= 10) {
-                    const removerBtn = document.createElement('button');
-                    removerBtn.className = 'btn-menu scribble';
-                    removerBtn.innerHTML = `Craft Remover<br><small>(10 Staples)</small>`;
-                    removerBtn.onclick = () => {
+                    const removerBtn = this.createActionButton('✂️', 'Remover', 'Spend 10 staples to equip a friendly unit with a Staple Remover.', { staples: 10 }, () => {
                         this.game.input.startTargeting((target) => {
                             if (target && target instanceof Unit && target.playerId === primary.playerId) {
                                 primary.staples -= 10;
@@ -539,8 +551,7 @@ export class UI {
                                 this.updateSelection([primary]);
                             }
                         });
-                    };
-                    removerBtn.onmouseover = () => this.showTooltip("Spend 10 staples to equip a friendly unit with a Staple Remover.");
+                    }, 'R');
                     actionsPanel.appendChild(removerBtn);
                 }
 
@@ -908,22 +919,16 @@ export class UI {
 
     addBuildButtons(panel, category = null) {
         if (!category) {
-            const infraBtn = document.createElement('button');
-            infraBtn.className = 'btn-menu scribble';
-            infraBtn.innerHTML = 'Infrastructure';
-            infraBtn.onclick = () => {
+            const infraBtn = this.createActionButton('🏗️', 'Infra', 'Infrastructure buildings for resource collection and processing.', null, () => {
                 panel.innerHTML = '';
                 this.addBuildButtons(panel, 'infrastructure');
-            };
+            }, 'B');
             panel.appendChild(infraBtn);
 
-            const militaryBtn = document.createElement('button');
-            militaryBtn.className = 'btn-menu scribble';
-            militaryBtn.innerHTML = 'Military';
-            militaryBtn.onclick = () => {
+            const militaryBtn = this.createActionButton('⚔️', 'Military', 'Barracks and research buildings for training troops.', null, () => {
                 panel.innerHTML = '';
                 this.addBuildButtons(panel, 'military');
-            };
+            }, 'V');
             panel.appendChild(militaryBtn);
             return;
         }
@@ -931,35 +936,21 @@ export class UI {
         const infra = ['furnace', 'vat', 'coffeeShop'];
         const military = ['dojo', 'saloon', 'docks', 'sharpener', 'theRip'];
         const buildings = category === 'infrastructure' ? infra : military;
+        const icons = { furnace: '🔥', vat: '🍯', coffeeShop: '☕', dojo: '🥋', saloon: '🤠', docks: '⚓', sharpener: '✏️', theRip: '🌀' };
 
         // Add back button
-        const backBtn = document.createElement('button');
-        backBtn.className = 'btn-menu scribble';
-        backBtn.innerHTML = '← Back';
-        backBtn.onclick = () => {
+        const backBtn = this.createActionButton('🔙', 'Back', 'Return to unit commands.', null, () => {
             panel.innerHTML = '';
-            // Need to recreate the initial doodle actions... 
-            // Re-render the whole doodle menu
-            const primary = this.game.world.selection[0];
             this.updateSelection(this.game.world.selection);
-        };
+        }, 'ESC');
         panel.appendChild(backBtn);
 
-        buildings.forEach(type => {
+        buildings.forEach((type, index) => {
             const stats = this.game.config.unitStats[type];
             if (!stats) return;
 
-            const btn = document.createElement('button');
-            btn.className = 'btn-menu scribble';
-            btn.style.fontSize = '0.7rem';
-            btn.style.padding = '0.3rem 0.5rem';
-            btn.style.margin = '2px';
-            
-            let costHtml = Object.entries(stats.cost || {}).map(([res, amt]) => `(${amt} ${res.toUpperCase()})`).join('<br>');
-
-            btn.innerHTML = `Build ${type.toUpperCase()}<br><small>${costHtml}</small>`;
-            btn.onclick = (e) => {
-                e.stopPropagation();
+            const hotkeys = ['Q', 'W', 'E', 'R', 'T'];
+            const btn = this.createActionButton(icons[type] || '🏠', type, stats.description || `Construct a ${type}`, stats.cost, () => {
                 // Check tier requirement
                 const requiredTier = stats.tier || 1;
                 const pId = this.game.config.localPlayerId || 1;
@@ -975,51 +966,30 @@ export class UI {
                         return;
                     }
                 }
-                
-                // Boundary check
                 if (this.game.world.placementMode) return;
-                
                 this.game.world.startPlacement(type);
-            };
-            
-            btn.onmouseover = () => this.showTooltip(stats.description || `Construct a ${type}`);
-            btn.onmouseout = () => {
-                // Return to building description if a building is selected
-                if (this.game.world.selection.length === 1) {
-                    const primary = this.game.world.selection[0];
-                    this.showTooltip(this.game.config.unitStats[primary.type]?.description || '');
-                } else {
-                    this.showTooltip('');
-                }
-            };
+            }, hotkeys[index]);
 
             panel.appendChild(btn);
         });
     }
 
     addTrainingButtons(building, panel) {
-        let types = [];
-        if (building.type === 'dojo') types = ['ninja', 'stickman'];
-        if (building.type === 'saloon') types = ['cowboy'];
-        if (building.type === 'docks') types = ['pirate', 'paperplane'];
-        if (building.type === 'sharpener') types = ['protractor'];
-        if (building.type === 'theRip') types = ['piousDoodle'];
+        let trainable = [];
+        if (building.type === 'dojo') trainable = ['ninja', 'stickman'];
+        if (building.type === 'saloon') trainable = ['cowboy'];
+        if (building.type === 'docks') trainable = ['pirate', 'paperplane'];
+        if (building.type === 'sharpener') trainable = ['protractor'];
+        if (building.type === 'theRip') trainable = ['piousDoodle'];
 
-        types.forEach(type => {
+        const icons = { ninja: '🥷', stickman: '🏃', cowboy: '🤠', pirate: '🏴‍☠️', paperplane: '✈️', protractor: '📐', piousDoodle: '🙏' };
+        const hotkeys = ['Q', 'W', 'E', 'R'];
+
+        trainable.forEach((type, index) => {
             const stats = this.game.config.unitStats[type];
             if (!stats) return;
 
-            const btn = document.createElement('button');
-            btn.className = 'btn-menu scribble';
-            btn.style.fontSize = '0.7rem';
-            btn.style.padding = '0.3rem 0.5rem';
-            btn.style.margin = '2px';
-            
-            let costHtml = Object.entries(stats.cost || {}).map(([res, amt]) => `(${amt} ${res.toUpperCase()})`).join('<br>');
-
-            btn.innerHTML = `Train ${type.toUpperCase()}<br><small>${costHtml}</small>`;
-            btn.onclick = (e) => {
-                e.stopPropagation();
+            const btn = this.createActionButton(icons[type] || '👤', type, stats.description || `Train ${type}`, stats.cost, () => {
                 // Check tier requirement
                 const requiredTier = stats.tier || 1;
                 const pId = this.game.config.localPlayerId || 1;
@@ -1043,17 +1013,7 @@ export class UI {
                 } else {
                     this.game.ui.showToast("Not enough resources!", "error");
                 }
-            };
-
-            btn.onmouseover = () => this.showTooltip(stats.description || `Train a ${type}`);
-            btn.onmouseout = () => {
-                if (this.game.world.selection.length === 1) {
-                    const primary = this.game.world.selection[0];
-                    this.showTooltip(this.game.config.unitStats[primary.type]?.description || '');
-                } else {
-                    this.showTooltip('');
-                }
-            };
+            }, hotkeys[index]);
 
             panel.appendChild(btn);
         });
@@ -1065,7 +1025,7 @@ export class UI {
         const availableUpgrades = Object.entries(this.game.config.upgrades)
             .filter(([id, up]) => up.type === unitType);
             
-        availableUpgrades.forEach(([id, up]) => {
+        availableUpgrades.forEach(([id, up], index) => {
             // Check if already researched
             const p = building.playerId;
             const researched = this.game.world.playerUpgrades[p] && this.game.world.playerUpgrades[p][id];
@@ -1073,19 +1033,10 @@ export class UI {
 
             // Check if already in queue
             const inQueue = building.trainingQueue.includes(id);
+            const hotkeys = ['A', 'S', 'D', 'F'];
             
-            const btn = document.createElement('button');
-            btn.className = 'btn-menu scribble';
-            btn.style.fontSize = '0.7rem';
-            btn.style.padding = '0.3rem 0.5rem';
-            btn.style.margin = '2px';
-            btn.disabled = inQueue;
-            
-            let costHtml = Object.entries(up.cost || {}).map(([res, amt]) => `(${amt} ${res.toUpperCase()})`).join('<br>');
-
-            btn.innerHTML = `${up.name}<br><small>${inQueue ? '(Queued)' : costHtml}</small>`;
-            btn.onclick = (e) => {
-                e.stopPropagation();
+            const btn = this.createActionButton('⚙️', up.name, up.description, up.cost, () => {
+                if (inQueue) return;
                 let canAfford = true;
                 for (const [res, amt] of Object.entries(up.cost || {})) {
                     if (this.resources[res] < amt) { canAfford = false; break; }
@@ -1101,18 +1052,9 @@ export class UI {
                 } else {
                     this.game.ui.showToast("Not enough resources!", "error");
                 }
-            };
-
-            btn.onmouseover = () => this.showTooltip(up.description || `Research ${up.name}`);
-            btn.onmouseout = () => {
-                if (this.game.world.selection.length === 1) {
-                    const primary = this.game.world.selection[0];
-                    this.showTooltip(this.game.config.unitStats[primary.type]?.description || '');
-                } else {
-                    this.showTooltip('');
-                }
-            };
-
+            }, hotkeys[index]);
+            
+            if (inQueue) btn.style.opacity = '0.5';
             panel.appendChild(btn);
         });
     }

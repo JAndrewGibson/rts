@@ -47,7 +47,7 @@ class ResourceNode {
         ctx.save();
         ctx.translate(this.x, this.y);
 
-        const customFrames = this.game.world.customAssets[this.type];
+        const customFrames = this.game.world.customAssets[0]?.[this.type];
         if (customFrames && customFrames.length > 0) {
             // Static or simple pulse for resources
             const frameIndex = Math.floor((Date.now() / 200) % customFrames.length);
@@ -120,7 +120,7 @@ class Splatter {
         ctx.translate(this.x, this.y);
         ctx.rotate(this.rotation);
 
-        const customFrames = this.game.world.customAssets['splatter'];
+        const customFrames = this.game.world.customAssets[0]?.['splatter'];
         if (customFrames && customFrames.length > 0) {
             const frameImg = customFrames[0]; // Splatters are static
             if (frameImg && frameImg.complete) {
@@ -209,7 +209,7 @@ class Unit {
         if (!this.attackTarget && attacker && attacker.hp > 0 && attacker.playerId !== this.playerId) {
             // Only retaliate if the attacker is a Unit (structures don't move/retaliate the same way)
             if (attacker instanceof Unit) {
-                this.setAttackTarget(attacker);
+                this.setAttackTarget(attacker, this.assignedArea !== null); // Keep area if already guarding
             }
         }
     }
@@ -273,18 +273,20 @@ class Unit {
         this.taskQueue.push(task);
     }
 
-    setTarget(x, y) {
+    setTarget(x, y, keepArea = false) {
         this.target = { x, y };
         this.attackTarget = null;
         this.taskQueue = [];
+        if (!keepArea) this.assignedArea = null;
         this.currentPath = this.game.world.findPath(this.x, this.y, x, y, this.isAerial);
         this.pathIndex = 0;
     }
 
-    setAttackTarget(target) {
+    setAttackTarget(target, keepArea = false) {
         this.attackTarget = target;
         this.target = null;
         this.taskQueue = [];
+        if (!keepArea) this.assignedArea = null;
         this.currentPath = this.game.world.findPath(this.x, this.y, target.x, target.y, this.isAerial);
         this.pathIndex = 0;
         this.pathUpdateTimer = 0;
@@ -683,11 +685,11 @@ class Unit {
                     this.assignedArea.contains(u.x, u.y)
                 );
                 if (enemy) {
-                    this.setAttackTarget(enemy);
+                    this.setAttackTarget(enemy, true);
                 } else if (!this.target) {
                     // Patrol: pick random point in area
                     const pt = this.assignedArea.getRandomPoint();
-                    this.setTarget(pt.x, pt.y);
+                    this.setTarget(pt.x, pt.y, true);
                 }
             }
         }
@@ -987,6 +989,8 @@ class Unit {
         this.y = Math.max(0, Math.min(this.game.world.mapSize, this.y));
     }
 
+
+
     attack(target, damage) {
         let multiplier = 1.0;
         // RPS Logic: Ninja > Pirate > Cowboy > Ninja
@@ -1012,23 +1016,35 @@ class Unit {
         let effectiveDefense = target.defense || 0;
         if (target.hasShield) effectiveDefense += 15;
         const finalDamage = Math.max(1, rawDamage - effectiveDefense);
-        target.takeDamage(finalDamage, this);
+
+        // Ranged units spawn projectiles
+        let projectileType = null;
+        if (this.type === 'cowboy') projectileType = 'bullet';
+        if (this.type === 'protractor') projectileType = 'beam';
+        if (this.type === 'paperplane') projectileType = 'bomb';
+
+        if (projectileType) {
+            this.game.world.projectiles.push(new Projectile(this.game, this.x, this.y, target, finalDamage, projectileType, this.playerId));
+        } else {
+            // Melee damage
+            target.takeDamage(finalDamage, this);
+
+            // Grape Shot (Pirate Splash) - only for melee hits
+            if (this.type === 'pirate') {
+                const splashRange = 60;
+                this.game.world.units.forEach(u => {
+                    if (u !== target && u.playerId !== this.playerId && u.hp > 0) {
+                        const dSq = (u.x - target.x) ** 2 + (u.y - target.y) ** 2;
+                        if (dSq < splashRange * splashRange) {
+                            u.hp -= finalDamage * 0.4; // 40% splash
+                        }
+                    }
+                });
+            }
+        }
 
         if (this.type === 'charcoalSmudger' && Math.random() > 0.6) {
             this.game.world.smudgeClouds.push(new SmudgeCloud(this.game, target.x, target.y, 8, this.playerId));
-        }
-
-        // Grape Shot (Pirate Splash)
-        if (this.type === 'pirate') {
-            const splashRange = 60;
-            this.game.world.units.forEach(u => {
-                if (u !== target && u.playerId !== this.playerId && u.hp > 0) {
-                    const dSq = (u.x - target.x) ** 2 + (u.y - target.y) ** 2;
-                    if (dSq < splashRange * splashRange) {
-                        u.hp -= finalDamage * 0.4; // 40% splash
-                    }
-                }
-            });
         }
     }
 
@@ -1349,9 +1365,10 @@ class Structure {
         // Update animation frame
         this.animTimer += dt;
         const assetKey = `${this.type}_${this.state}`;
-        let customFrames = this.game.world.customAssets[assetKey];
+        const playerAssets = this.game.world.customAssets[this.playerId];
+        let customFrames = playerAssets ? playerAssets[assetKey] : null;
         if ((!customFrames || customFrames.length === 0) && this.state !== 'idle') {
-            customFrames = this.game.world.customAssets[`${this.type}_idle`];
+            customFrames = playerAssets ? playerAssets[`${this.type}_idle`] : null;
         }
 
         if (customFrames && customFrames.length > 0) {
@@ -2094,7 +2111,82 @@ class AttackArea {
         return {
             x: this.x1 + this.width / 2,
             y: this.y1 + this.height / 2
-        };
+        }
+    }
+}
+
+class Projectile {
+    constructor(game, x, y, target, damage, type, playerId) {
+        this.game = game;
+        this.x = x;
+        this.y = y;
+        this.target = target;
+        this.damage = damage;
+        this.type = type; // bullet, beam, bomb
+        this.playerId = playerId;
+        this.speed = 600;
+        if (type === 'beam') this.speed = 800;
+        if (type === 'bomb') this.speed = 400;
+        this.isDead = false;
+    }
+
+    update(dt) {
+        if (this.isDead) return;
+        if (!this.target || this.target.hp <= 0) {
+            this.isDead = true;
+            return;
+        }
+
+        const dx = this.target.x - this.x;
+        const dy = this.target.y - this.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < 15) {
+            this.target.takeDamage(this.damage, { playerId: this.playerId, type: 'projectile' });
+            this.isDead = true;
+        } else {
+            this.x += (dx / dist) * this.speed * dt;
+            this.y += (dy / dist) * this.speed * dt;
+        }
+    }
+
+    render(ctx) {
+        const assetKey = `projectile_${this.type}_idle`;
+        const playerAssets = this.game.world.customAssets[this.playerId];
+        let customFrames = playerAssets ? playerAssets[assetKey] : null;
+
+        if (customFrames && customFrames.length > 0) {
+            const img = customFrames[0];
+            if (img && img.complete) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                const angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+                ctx.rotate(angle);
+                ctx.drawImage(img, -15, -15, 30, 30);
+                ctx.restore();
+                return;
+            }
+        }
+
+        // Fallback: simple dot or line
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        const palette = this.game.world.playerPalettes[this.playerId] || { primary: '#2c3e50' };
+        ctx.fillStyle = palette.primary;
+        
+        if (this.type === 'beam') {
+            ctx.rotate(Math.atan2(this.target.y - this.y, this.target.x - this.x));
+            ctx.fillRect(-10, -2, 20, 4);
+        } else if (this.type === 'bomb') {
+            ctx.beginPath();
+            ctx.arc(0, 0, 6, 0, Math.PI * 2);
+            ctx.fill();
+        } else {
+            ctx.beginPath();
+            ctx.arc(0, 0, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
     }
 }
 
@@ -2108,6 +2200,7 @@ export class World {
         this.inkClouds = [];
         this.smudgeClouds = [];
         this.tapeTiles = [];
+        this.projectiles = [];
         this.attackAreas = [];
         this.selection = [];
         this.mapSize = 3000;
@@ -2219,6 +2312,7 @@ export class World {
         this.inkClouds = [];
         this.smudgeClouds = [];
         this.tapeTiles = [];
+        this.projectiles = [];
         this.coffeeFields = [];
 
         this.playerResources = {};
@@ -2632,7 +2726,7 @@ export class World {
         return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
     }
 
-    loadCustomPacks() {
+    loadCustomPacks(specificAssetKey = null) {
         const stored = localStorage.getItem('doodle_art_packs');
         if (!stored) return;
 
@@ -2640,58 +2734,72 @@ export class World {
             const packs = JSON.parse(stored);
             const pack = packs['default'] || {};
 
-            this.customAssets = {}; // [playerId][assetKey] = Image[]
-            this.customMeta = {};   // [assetKey] = { speed, loopType }
+            if (!specificAssetKey) {
+                this.customAssets = {}; // Full reset
+                this.customMeta = {};
+            }
 
-            const assetKeys = Object.keys(pack).filter(k => !k.endsWith('_meta'));
+            const assetKeys = specificAssetKey ? [specificAssetKey] : Object.keys(pack).filter(k => !k.endsWith('_meta'));
 
-            // Load Metadata
+            // Load Metadata (always load if not filtering or if specifically targeted)
             Object.keys(pack).forEach(k => {
                 if (k.endsWith('_meta')) {
                     const baseKey = k.replace('_meta', '');
-                    this.customMeta[baseKey] = pack[k];
+                    if (!specificAssetKey || specificAssetKey === baseKey) {
+                        this.customMeta[baseKey] = pack[k];
+                    }
                 }
             });
-            // For each player, generate their colored version of the assets
-            for (let pId = 1; pId <= 8; pId++) {
-                this.customAssets[pId] = {};
-                const colors = this.playerPalettes[pId];
-                if (!colors) continue;
+
+            // For each player (0 is neutral/unassigned), generate their colored version of the assets
+            for (let pId = 0; pId <= 8; pId++) {
+                if (!this.customAssets[pId]) this.customAssets[pId] = {};
+                const colors = this.playerPalettes[pId] || null;
 
                 // 1. Swap custom drawn assets
                 assetKeys.forEach(assetKey => {
                     const frames = pack[assetKey];
+                    if (!frames) return;
+
                     this.customAssets[pId][assetKey] = frames.map(dataUri => {
                         const img = new Image();
                         img.onload = () => {
-                            const swappedCanvas = this.generateSwappedCanvas(img, colors);
-                            const swappedImg = new Image();
-                            swappedImg.src = swappedCanvas.toDataURL();
+                            let finalImg = img;
+                            if (colors) {
+                                const swappedCanvas = this.generateSwappedCanvas(img, colors);
+                                finalImg = new Image();
+                                finalImg.src = swappedCanvas.toDataURL();
+                            }
                             const idx = this.customAssets[pId][assetKey].indexOf(img);
-                            if (idx !== -1) this.customAssets[pId][assetKey][idx] = swappedImg;
+                            if (idx !== -1) this.customAssets[pId][assetKey][idx] = finalImg;
                         };
                         img.src = dataUri;
                         return img;
                     });
                 });
 
-                // 2. Swap default procedural assets (ninja, cowboy, pirate, castle)
-                const defaults = ['ninja', 'cowboy', 'pirate', 'castle'];
-                defaults.forEach(key => {
-                    const img = new Image();
-                    img.onload = () => {
-                        const swappedCanvas = this.generateSwappedCanvas(img, colors);
-                        if (!this.customAssets[pId][key]) this.customAssets[pId][key] = [];
-                        const swappedImg = new Image();
-                        swappedImg.src = swappedCanvas.toDataURL();
-                        this.customAssets[pId][key] = [swappedImg];
-                        this.customAssets[pId][key + '_idle'] = [swappedImg];
-                    };
-                    img.src = key + (key === 'pirate' ? '.webp' : '.png');
-                });
+                // 2. Swap default procedural assets (if not specifically filtering for a custom one)
+                if (!specificAssetKey) {
+                    const defaults = ['ninja', 'cowboy', 'pirate', 'castle'];
+                    defaults.forEach(key => {
+                        const img = new Image();
+                        img.onload = () => {
+                            let finalImg = img;
+                            if (colors) {
+                                const swappedCanvas = this.generateSwappedCanvas(img, colors);
+                                finalImg = new Image();
+                                finalImg.src = swappedCanvas.toDataURL();
+                            }
+                            if (!this.customAssets[pId][key]) this.customAssets[pId][key] = [finalImg];
+                            if (!this.customAssets[pId][key + '_idle']) this.customAssets[pId][key + '_idle'] = [finalImg];
+                        };
+                        img.src = key + (key === 'pirate' ? '.webp' : '.png');
+                    });
+                }
             }
 
-            console.log("Custom Art Packs processed for all players.");
+            if (!specificAssetKey) console.log("Full Art Pack reload completed.");
+            else console.log(`Targeted reload for asset: ${specificAssetKey}`);
 
             // Re-render font with debouncing
             let fontLoadCount = 0;
@@ -2871,6 +2979,9 @@ export class World {
 
         // Clean up old tape tiles
         this.tapeTiles = this.tapeTiles.filter(tile => tile.update(dt));
+        
+        this.projectiles.forEach(p => p.update(dt));
+        this.projectiles = this.projectiles.filter(p => !p.isDead);
 
         // Reset coffee boosts each frame
         this.units.forEach(u => {
@@ -2909,6 +3020,11 @@ export class World {
         if (this.game.isHost && this.game.config.gameState === 'PLAYING') {
             this.aiControllers.forEach(ai => ai.update(dt));
         }
+
+        // Clean up orphaned attack areas (those with no units assigned)
+        this.attackAreas = this.attackAreas.filter(area => {
+            return this.units.some(u => u.assignedArea === area);
+        });
 
         // Clean up depleted persistent resources
         this.resources = this.resources.filter(res => !res.isPersistent || res.amount > 0);
@@ -3084,6 +3200,31 @@ export class World {
         this.game.ui.updateSelection(this.selection);
     }
 
+    upgradeTier(playerId) {
+        const currentTier = this.playerTiers[playerId] || 1;
+        const nextTier = currentTier + 1;
+        const tierData = this.game.config.techTiers[nextTier];
+        
+        if (!tierData) return;
+
+        // Deduct resources
+        const pool = this.playerResources[playerId];
+        if (!pool) return;
+
+        for (const [res, amount] of Object.entries(tierData.cost)) {
+            pool[res] -= amount;
+        }
+
+        this.playerTiers[playerId] = nextTier;
+        
+        // Sync UI if local
+        if (this.game.ui && playerId === this.game.config.localPlayerId) {
+            this.game.ui.updateResourceDisplay();
+            this.game.ui.showToast(`Upgraded to ${tierData.name}!`);
+            this.game.ui.updateSelection(this.selection); // Refresh buttons
+        }
+    }
+
     handleBuildingDeath(building, index) {
         // Large splatter for buildings
         this.splatters.push(new Splatter(this.game, building.x, building.y, 150));
@@ -3183,6 +3324,7 @@ export class World {
         // Draw Ink Clouds
         this.inkClouds.forEach(c => c.render(ctx));
         this.smudgeClouds.forEach(c => c.render(ctx));
+        this.projectiles.forEach(p => p.render(ctx));
 
         // Draw Tape Tiles
         this.tapeTiles.forEach(t => t.render(ctx));
@@ -3353,6 +3495,13 @@ export class World {
         const localId = this.game.config.localPlayerId;
         if (this.selection.length === 0) return;
 
+        // Check if the center of the area is blocked by a wall or building
+        const center = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
+        if (this.checkBlocked(center.x, center.y, 20)) {
+            this.game.ui.showToast("Cannot guard inside a wall or building!", "error");
+            return;
+        }
+
         const area = new AttackArea(this.game, start.x, start.y, end.x, end.y, localId);
         this.attackAreas.push(area);
 
@@ -3361,8 +3510,7 @@ export class World {
                 unit.assignedArea = area;
                 unit.taskQueue = [];
                 unit.attackTarget = null;
-                const center = area.getCenter();
-                unit.setTarget(center.x, center.y);
+                unit.setTarget(center.x, center.y, true); // Keep the area reference
             }
         });
 
