@@ -5,6 +5,7 @@ import os
 from flask import Flask, render_template, send_from_directory, request, jsonify
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from flask_sqlalchemy import SQLAlchemy
+from dotenv import load_dotenv
 from datetime import datetime
 import json
 import mimetypes
@@ -13,6 +14,8 @@ import string
 
 mimetypes.add_type('application/javascript', '.js')
 mimetypes.add_type('text/css', '.css')
+
+load_dotenv()
 
 try:
     import redis

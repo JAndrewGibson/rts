@@ -200,33 +200,61 @@ export class Marketplace {
         const ctx = canvas.getContext('2d');
         const idleKey = `${asset.asset_type}_idle`;
         
-        let frames = [];
+        let rawFrames = [];
         if (asset.isLocal) {
-            frames = asset.data[idleKey] || [];
+            rawFrames = asset.data[idleKey] || [];
         } else {
-            frames = asset.data[idleKey] || [];
+            // Support both direct array or nested object if data structure varies
+            rawFrames = asset.data[idleKey] || asset.data || [];
         }
 
-        if (frames.length === 0) return;
+        if (!Array.isArray(rawFrames) || rawFrames.length === 0) {
+            console.warn(`No frames found for ${asset.asset_type} using key ${idleKey}`);
+            this.drawPlaceholder(ctx);
+            return;
+        }
+
+        // Pre-load all frames to avoid flickering and "blank" states
+        const loadedFrames = rawFrames.map(data => {
+            const img = new Image();
+            img.src = data;
+            return img;
+        });
 
         let frameIndex = 0;
+        let startAttempts = 0;
         const animate = () => {
-            if (!document.body.contains(canvas)) return; // Stop if removed from DOM
+            // Check if orphaned, but allow a few attempts for the canvas to be added to DOM
+            if (startAttempts > 10 && !document.body.contains(canvas)) return; 
+            startAttempts++;
             
-            const data = frames[frameIndex % frames.length];
-            if (data) {
-                const img = new Image();
+            const img = loadedFrames[frameIndex % loadedFrames.length];
+            if (img && img.complete && img.naturalWidth > 0) {
+                ctx.clearRect(0, 0, 400, 400);
+                ctx.drawImage(img, 0, 0, 400, 400);
+            } else if (img) {
                 img.onload = () => {
                     ctx.clearRect(0, 0, 400, 400);
-                    ctx.drawImage(img, 0, 0);
+                    ctx.drawImage(img, 0, 0, 400, 400);
                 };
-                img.src = data;
             }
             
             frameIndex++;
-            setTimeout(() => requestAnimationFrame(animate), 150); // ~7 FPS for preview
+            setTimeout(() => requestAnimationFrame(animate), 200); 
         };
         animate();
+    }
+
+    drawPlaceholder(ctx) {
+        ctx.clearRect(0, 0, 400, 400);
+        ctx.strokeStyle = '#ddd';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.strokeRect(50, 50, 300, 300);
+        ctx.fillStyle = '#999';
+        ctx.font = '20px "Gaegu", cursive';
+        ctx.textAlign = 'center';
+        ctx.fillText('No Animation', 200, 210);
     }
 
     async likeAsset(asset, btn) {
