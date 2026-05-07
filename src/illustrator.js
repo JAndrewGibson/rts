@@ -206,6 +206,10 @@ export class Illustrator {
             this.saveAnimationSettings();
         };
         document.getElementById('preview-loop-type').onchange = () => this.saveAnimationSettings();
+        document.getElementById('onion-skin-mode').onchange = () => {
+            this.saveAnimationSettings();
+            this.updateOnionSkin();
+        };
 
         // Frame Management
         document.getElementById('btn-new-frame').onclick = () => this.addFrame();
@@ -489,37 +493,38 @@ export class Illustrator {
         const ctx = this.onionCanvas.getContext('2d');
         ctx.clearRect(0, 0, 400, 400);
 
-        // Show first frame of Idle as a ghost if we are in another action
-        if (this.currentAction !== 'idle') {
+        const mode = document.getElementById('onion-skin-mode')?.value || 'previous';
+        if (mode === 'none') return;
+
+        const storageKey = `${this.currentAsset}_${this.currentAction}`;
+        const frames = this.packs[this.currentPack][storageKey] || [];
+        
+        let onionData = null;
+
+        if (mode === 'first' && frames.length > 0) {
+            onionData = frames[0];
+        } else if (mode === 'previous' && this.currentFrame > 0 && frames.length > 0) {
+            onionData = frames[this.currentFrame - 1];
+        }
+
+        // Fallback: If in another action and first frame is blank, show idle frame 1
+        if (!onionData && this.currentAction !== 'idle') {
             const idleKey = `${this.currentAsset}_idle`;
             const idleFrames = this.packs[this.currentPack][idleKey];
             if (idleFrames && idleFrames[0]) {
-                const img = new Image();
-                img.onload = () => {
-                    ctx.save();
-                    ctx.globalAlpha = 0.35; // Increased visibility for the idle reference
-                    ctx.drawImage(img, 0, 0);
-                    ctx.restore();
-                };
-                img.src = idleFrames[0];
+                onionData = idleFrames[0];
             }
         }
 
-        // Show previous frame of current animation
-        if (this.currentFrame > 0) {
-            const storageKey = `${this.currentAsset}_${this.currentAction}`;
-            const frames = this.packs[this.currentPack][storageKey];
-            const prevData = frames[this.currentFrame - 1];
-            if (prevData) {
-                const img = new Image();
-                img.onload = () => {
-                    ctx.save();
-                    ctx.globalAlpha = 0.55; // Increased visibility for the direct sequence
-                    ctx.drawImage(img, 0, 0);
-                    ctx.restore();
-                };
-                img.src = prevData;
-            }
+        if (onionData) {
+            const img = new Image();
+            img.onload = () => {
+                ctx.save();
+                ctx.globalAlpha = 0.4;
+                ctx.drawImage(img, 0, 0);
+                ctx.restore();
+            };
+            img.src = onionData;
         }
     }
 
@@ -629,6 +634,12 @@ export class Illustrator {
             }
         });
 
+        // Include metadata (speed, loop type)
+        const metaKey = `${asset.id}_meta`;
+        if (this.packs[this.currentPack][metaKey]) {
+            unitData[metaKey] = this.packs[this.currentPack][metaKey];
+        }
+
         if (!hasContent) {
             alert("Please draw something before sharing!");
             return;
@@ -706,7 +717,7 @@ export class Illustrator {
 
     loadAnimationSettings() {
         const storageKey = `${this.currentAsset}_${this.currentAction}_meta`;
-        const settings = this.packs[this.currentPack][storageKey] || { speed: 8, loopType: 'loop' };
+        const settings = this.packs[this.currentPack][storageKey] || { speed: 8, loopType: 'loop', onionMode: 'previous' };
 
         const speedInput = document.getElementById('preview-speed');
         if (speedInput) speedInput.value = settings.speed;
@@ -721,15 +732,19 @@ export class Illustrator {
         }
         
         const loopType = document.getElementById('preview-loop-type');
-        if (loopType) loopType.value = settings.loopType;
+        if (loopType) loopType.value = settings.loopType || 'loop';
+
+        const onionMode = document.getElementById('onion-skin-mode');
+        if (onionMode) onionMode.value = settings.onionMode || 'previous';
     }
 
     saveAnimationSettings() {
         const storageKey = `${this.currentAsset}_${this.currentAction}_meta`;
         const speed = parseInt(document.getElementById('preview-speed').value);
         const loopType = document.getElementById('preview-loop-type').value;
+        const onionMode = document.getElementById('onion-skin-mode').value;
 
-        this.packs[this.currentPack][storageKey] = { speed, loopType };
+        this.packs[this.currentPack][storageKey] = { speed, loopType, onionMode };
         localStorage.setItem('doodle_art_packs', JSON.stringify(this.packs));
     }
 

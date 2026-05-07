@@ -30,6 +30,17 @@ export class Marketplace {
         document.getElementById('tab-in-game').onclick = () => {
             this.switchTab('in-game');
         };
+
+        document.getElementById('btn-modal-close').onclick = () => {
+            document.getElementById('marketplace-modal').style.display = 'none';
+        };
+
+        window.addEventListener('click', (e) => {
+            const modal = document.getElementById('marketplace-modal');
+            if (e.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
     }
 
     switchTab(tab) {
@@ -114,6 +125,10 @@ export class Marketplace {
             btn.onclick = () => {
                 this.currentFilter = type;
                 this.renderGridWithFilter();
+                
+                // Update active state visually
+                document.querySelectorAll('.marketplace-filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
             };
             filterContainer.appendChild(btn);
         });
@@ -146,8 +161,21 @@ export class Marketplace {
         canvas.height = 400;
         preview.appendChild(canvas);
         
-        // Start animation loop for this card
-        this.startCardAnimation(canvas, asset);
+        // Animation Count Badge - filter out meta keys and empty actions
+        const actions = Object.keys(asset.data).filter(k => 
+            k.startsWith(asset.asset_type) && 
+            !k.endsWith('_meta') && 
+            Array.isArray(asset.data[k]) && 
+            asset.data[k].length > 0
+        );
+        if (actions.length > 1) {
+            const badge = document.createElement('div');
+            badge.className = 'marketplace-animation-badge';
+            badge.innerHTML = `🎞️ ${actions.length}`;
+            preview.appendChild(badge);
+        }
+        
+        card.onclick = () => this.showAssetDetails(asset);
 
         const info = document.createElement('div');
         info.className = 'marketplace-card-info';
@@ -193,23 +221,91 @@ export class Marketplace {
         card.appendChild(info);
         card.appendChild(footer);
 
+        // Start animation loop AFTER adding to card (but it will wait for DOM)
+        this.startCardAnimation(canvas, asset);
+
         return card;
     }
 
-    startCardAnimation(canvas, asset) {
-        const ctx = canvas.getContext('2d');
-        const idleKey = `${asset.asset_type}_idle`;
+    showAssetDetails(asset) {
+        const modal = document.getElementById('marketplace-modal');
+        const canvas = document.getElementById('modal-canvas');
+        const nameElem = document.getElementById('modal-asset-name');
+        const creatorElem = document.getElementById('modal-asset-creator');
+        const likesElem = modal.querySelector('.likes-count');
+        const framesElem = modal.querySelector('.frames-count');
+        const selector = document.getElementById('modal-animation-selector');
         
+        nameElem.textContent = asset.asset_type.charAt(0).toUpperCase() + asset.asset_type.slice(1);
+        creatorElem.textContent = `by ${asset.creator_name}`;
+        likesElem.textContent = asset.likes || 0;
+        
+        // Setup animation buttons - filter out meta keys and empty actions
+        selector.innerHTML = '';
+        const actions = Object.keys(asset.data).filter(k => 
+            k.startsWith(asset.asset_type) && 
+            !k.endsWith('_meta') && 
+            Array.isArray(asset.data[k]) && 
+            asset.data[k].length > 0
+        );
+        
+        let currentAction = `${asset.asset_type}_idle`;
+        if (!asset.data[currentAction] && actions.length > 0) {
+            currentAction = actions[0];
+        }
+
+        actions.forEach(actionKey => {
+            const btn = document.createElement('button');
+            btn.className = `marketplace-action-btn ${actionKey === currentAction ? 'active' : ''}`;
+            const actionName = actionKey.replace(`${asset.asset_type}_`, '');
+            btn.textContent = actionName.charAt(0).toUpperCase() + actionName.slice(1);
+            btn.onclick = () => {
+                document.querySelectorAll('.marketplace-action-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentAction = actionKey;
+                this.startCardAnimation(canvas, asset, currentAction);
+                framesElem.textContent = asset.data[currentAction].length;
+            };
+            selector.appendChild(btn);
+        });
+
+        // Initialize preview
+        this.startCardAnimation(canvas, asset, currentAction);
+        framesElem.textContent = asset.data[currentAction] ? asset.data[currentAction].length : 0;
+
+        // Setup action buttons
+        const replaceBtn = document.getElementById('btn-modal-replace');
+        const likeBtn = document.getElementById('btn-modal-like');
+        
+        replaceBtn.onclick = () => this.replaceInGame(asset);
+        
+        const isLiked = this.likedAssets.includes(asset.id);
+        likeBtn.style.opacity = isLiked ? '0.5' : '1';
+        likeBtn.textContent = isLiked ? '❤️ Liked' : '❤️ Like';
+        likeBtn.onclick = () => {
+            if (!isLiked) this.likeAsset(asset, likeBtn);
+        };
+
+        modal.style.display = 'flex';
+    }
+
+    startCardAnimation(canvas, asset, specificAction = null) {
+        const ctx = canvas.getContext('2d');
+        const actionKey = specificAction || `${asset.asset_type}_idle`;
+        
+        // Assign a unique ID to this animation loop to prevent overlapping
+        const animationId = Math.random().toString(36).substr(2, 9);
+        canvas.dataset.activeAnimation = animationId;
+
         let rawFrames = [];
         if (asset.isLocal) {
-            rawFrames = asset.data[idleKey] || [];
+            rawFrames = asset.data[actionKey] || [];
         } else {
-            // Support both direct array or nested object if data structure varies
-            rawFrames = asset.data[idleKey] || asset.data || [];
+            rawFrames = asset.data[actionKey] || asset.data || [];
         }
 
         if (!Array.isArray(rawFrames) || rawFrames.length === 0) {
-            console.warn(`No frames found for ${asset.asset_type} using key ${idleKey}`);
+            console.warn(`No frames found for ${asset.asset_type} using key ${actionKey}`);
             this.drawPlaceholder(ctx);
             return;
         }
@@ -221,26 +317,47 @@ export class Marketplace {
             return img;
         });
 
+        // Read metadata for speed and loop type
+        const metaKey = `${asset.asset_type}_meta`;
+        const meta = asset.data[metaKey] || {};
+        const speed = parseInt(meta.speed) || 200;
+        const isBoomerang = meta.loop === 'boomerang';
+
         let frameIndex = 0;
+        let direction = 1;
         let startAttempts = 0;
         const animate = () => {
-            // Check if orphaned, but allow a few attempts for the canvas to be added to DOM
+            // Stop if orphaned, or if another animation has started on this canvas
             if (startAttempts > 10 && !document.body.contains(canvas)) return; 
+            if (canvas.dataset.activeAnimation !== animationId) return;
+            
             startAttempts++;
             
-            const img = loadedFrames[frameIndex % loadedFrames.length];
+            // Calculate frame based on loop type
+            let currentFrame;
+            if (isBoomerang && loadedFrames.length > 1) {
+                currentFrame = frameIndex;
+                if (frameIndex >= loadedFrames.length - 1) direction = -1;
+                if (frameIndex <= 0) direction = 1;
+                frameIndex += direction;
+            } else {
+                currentFrame = frameIndex % loadedFrames.length;
+                frameIndex++;
+            }
+
+            const img = loadedFrames[currentFrame];
             if (img && img.complete && img.naturalWidth > 0) {
                 ctx.clearRect(0, 0, 400, 400);
                 ctx.drawImage(img, 0, 0, 400, 400);
             } else if (img) {
                 img.onload = () => {
+                    if (canvas.dataset.activeAnimation !== animationId) return;
                     ctx.clearRect(0, 0, 400, 400);
                     ctx.drawImage(img, 0, 0, 400, 400);
                 };
             }
             
-            frameIndex++;
-            setTimeout(() => requestAnimationFrame(animate), 200); 
+            setTimeout(() => requestAnimationFrame(animate), speed); 
         };
         animate();
     }

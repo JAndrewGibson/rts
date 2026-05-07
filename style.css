@@ -1055,6 +1055,44 @@ body {
     border-color: var(--text-color);
 }
 
+.marketplace-animation-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: white;
+    border: 1px solid var(--text-color);
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-size: 0.7rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    box-shadow: 2px 2px 0 var(--text-color);
+    pointer-events: none;
+}
+
+.marketplace-action-btn {
+    font-size: 0.8rem;
+    padding: 6px 12px;
+    border: 2px solid var(--text-color);
+    background: #f0f0f0;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.1s;
+}
+
+.marketplace-action-btn:hover {
+    background: #e0e0e0;
+}
+
+.marketplace-action-btn.active {
+    background: var(--text-color);
+    color: white;
+    transform: translate(1px, 1px);
+}
+
 #marketplace-page .setup-content {
     max-width: 1200px;
 }

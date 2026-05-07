@@ -299,6 +299,14 @@
                     <div id="illustrator-right-sidebar" class="illustrator-frames"
                         style="width: 200px; border: 2px solid var(--text-color); background: rgba(255,255,255,0.5); overflow-y: auto; overflow-x: hidden; padding: 15px;">
                         <h4 class="scribble">Frames</h4>
+                        <div style="margin-bottom: 10px;">
+                            <label class="scribble" style="font-size: 0.6rem; display: block; margin-bottom: 3px;">Onion Skin:</label>
+                            <select id="onion-skin-mode" class="" style="width: 100%; font-size: 0.8rem; padding: 3px; cursor: pointer; background: white; border: 2px solid var(--text-color); font-family: inherit; font-weight: bold;">
+                                <option value="previous">Previous Frame</option>
+                                <option value="first">First Frame</option>
+                                <option value="none">None</option>
+                            </select>
+                        </div>
                         <div id="frame-list"
                             style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;">
                             <!-- Frame thumbnails injected here -->
@@ -428,6 +436,47 @@
 
                 <div class="menu-buttons" style="margin-top: 20px; flex-shrink: 0;">
                     <button id="btn-marketplace-back" class="btn-menu">Back to Menu</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Marketplace Asset Details Modal -->
+        <div id="marketplace-modal" class="menu-overlay" style="display: none; z-index: 15000; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px);">
+            <div class="setup-content" style="max-width: 900px; width: 90%; background: white; border: 4px solid var(--text-color); padding: 30px; position: relative;">
+                <button id="btn-modal-close" style="position: absolute; top: 10px; right: 10px; background: none; border: none; font-size: 2rem; cursor: pointer; color: var(--text-color);">×</button>
+                
+                <div style="display: flex; gap: 30px; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 300px;">
+                        <div id="modal-preview-container" class="marketplace-card-preview" style="width: 100%; border-width: 2px;">
+                            <canvas id="modal-canvas" width="400" height="400"></canvas>
+                        </div>
+                        <div id="modal-animation-selector" style="display: flex; justify-content: center; gap: 10px; margin-top: 15px; flex-wrap: wrap;">
+                            <!-- Action buttons like Idle, Walk, etc. -->
+                        </div>
+                    </div>
+                    
+                    <div style="flex: 1; min-width: 300px; display: flex; flex-direction: column; gap: 15px;">
+                        <div>
+                            <h2 id="modal-asset-name" class="scribble" style="font-size: 3rem; margin: 0;">Ninja</h2>
+                            <p id="modal-asset-creator" class="marketplace-card-creator" style="font-size: 1.2rem;">by Anonymous</p>
+                        </div>
+                        
+                        <div id="modal-stats" style="display: flex; gap: 20px; padding: 15px; border: 2px dashed #ccc; border-radius: 8px;">
+                            <div id="modal-likes-stat">❤️ <span class="likes-count">0</span> Likes</div>
+                            <div id="modal-frames-stat">🎞️ <span class="frames-count">0</span> Frames</div>
+                        </div>
+
+                        <div style="flex-grow: 1;">
+                            <p id="modal-description" class="scribble" style="font-size: 1.1rem; line-height: 1.4;">
+                                This custom artwork replaces the default unit visuals in your game world.
+                            </p>
+                        </div>
+
+                        <div style="display: flex; gap: 10px; margin-top: auto;">
+                            <button id="btn-modal-replace" class="btn-menu" style="flex: 2; font-size: 1rem;">Replace In-Game</button>
+                            <button id="btn-modal-like" class="btn-menu" style="flex: 1; font-size: 1rem;">❤️ Like</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
