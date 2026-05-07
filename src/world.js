@@ -3847,20 +3847,26 @@ export class World {
 
     addPlayerResource(playerId, type, amount, target) {
         if (!this.playerResources[playerId]) return;
+        if (isNaN(amount)) return;
 
         const pool = this.playerResources[playerId];
         if (type === 'ink') {
-            pool.ink += amount;
+            pool.ink = (pool.ink || 0) + amount;
         } else if (type === 'coal') {
             if (target && (target.type === 'furnace' || target.hasBuiltInFurnace)) {
-                pool.graphite += amount;
+                pool.graphite = (pool.graphite || 0) + amount;
             } else {
-                pool.coal += amount;
+                pool.coal = (pool.coal || 0) + amount;
             }
         } else if (type === 'coffee') {
-            pool.coffee += amount;
+            pool.coffee = (pool.coffee || 0) + amount;
         } else if (type === 'eraser' || type === 'shavings') {
-            pool.eraser += amount;
+            pool.shavings = (pool.shavings || 0) + amount;
+        }
+
+        // Clean up any NaNs that might have slipped in
+        for (let key in pool) {
+            if (isNaN(pool[key])) pool[key] = 0;
         }
 
         // If it's the local player, sync UI

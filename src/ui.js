@@ -87,8 +87,10 @@ export class UI {
 
     addResource(type, amount) {
         if (type === 'eraser') type = 'shavings';
+        if (isNaN(amount)) return;
         if (this.resources[type] !== undefined) {
             this.resources[type] += amount;
+            if (isNaN(this.resources[type])) this.resources[type] = 0;
         }
         this.updateResourceDisplay();
     }
