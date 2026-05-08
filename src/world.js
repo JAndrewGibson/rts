@@ -223,44 +223,6 @@ class Unit {
         let vx = (dx / dist) * currentSpeed;
         let vy = (dy / dist) * currentSpeed;
 
-        // Steering separation
-        let sepX = 0;
-        let sepY = 0;
-        let count = 0;
-
-        this.game.world.units.forEach(other => {
-            if (other === this || other.isDead || other.isAerial || this.isAerial) return;
-            const odx = this.x - other.x;
-            const ody = this.y - other.y;
-            const odistSq = odx * odx + ody * ody;
-            const minDist = (this.radius + other.radius) * 1.1; // Allow denser packing
-
-            if (odistSq > 0 && odistSq < minDist * minDist) {
-                const odist = Math.sqrt(odistSq);
-                const weight = (minDist - odist) / minDist;
-                sepX += (odx / odist) * weight;
-                sepY += (ody / odist) * weight;
-                count++;
-            }
-        });
-
-        if (count > 0) {
-            // Apply separation proportional to how crowded they are
-            sepX = sepX * currentSpeed * 1.2;
-            sepY = sepY * currentSpeed * 1.2;
-
-            // Prioritize forward movement (0.8), gently nudge with separation
-            vx = vx * 0.8 + sepX;
-            vy = vy * 0.8 + sepY;
-
-            const finalDist = Math.sqrt(vx * vx + vy * vy) || 1;
-            // Only cap speed if it exceeds max speed, don't force minimum speed
-            if (finalDist > currentSpeed) {
-                vx = (vx / finalDist) * currentSpeed;
-                vy = (vy / finalDist) * currentSpeed;
-            }
-        }
-
         const moveX = vx * dt;
         const moveY = vy * dt;
 
@@ -367,6 +329,76 @@ class Unit {
         }
     }
 
+
+    resolveCollisions() {
+        if (this.isDead || this.isAerial) return;
+
+        // 1. Push out of barriers
+        this.game.world.barriers.forEach(b => {
+            const left = b.x - this.radius;
+            const right = b.x + b.width + this.radius;
+            const top = b.y - this.radius;
+            const bottom = b.y + b.height + this.radius;
+
+            if (this.x > left && this.x < right && this.y > top && this.y < bottom) {
+                const distLeft = Math.abs(this.x - left);
+                const distRight = Math.abs(this.x - right);
+                const distTop = Math.abs(this.y - top);
+                const distBottom = Math.abs(this.y - bottom);
+
+                const min = Math.min(distLeft, distRight, distTop, distBottom);
+
+                if (min === distLeft) this.x = left;
+                else if (min === distRight) this.x = right;
+                else if (min === distTop) this.y = top;
+                else if (min === distBottom) this.y = bottom;
+            }
+        });
+
+        // 2. Push out of structures
+        this.game.world.buildings.forEach(b => {
+            const left = b.x - b.width / 2 - this.radius;
+            const right = b.x + b.width / 2 + this.radius;
+            const top = b.y - b.height / 2 - this.radius;
+            const bottom = b.y + b.height / 2 + this.radius;
+
+            if (this.x > left && this.x < right && this.y > top && this.y < bottom) {
+                const distLeft = Math.abs(this.x - left);
+                const distRight = Math.abs(this.x - right);
+                const distTop = Math.abs(this.y - top);
+                const distBottom = Math.abs(this.y - bottom);
+
+                const min = Math.min(distLeft, distRight, distTop, distBottom);
+
+                if (min === distLeft) this.x = left;
+                else if (min === distRight) this.x = right;
+                else if (min === distTop) this.y = top;
+                else if (min === distBottom) this.y = bottom;
+            }
+        });
+
+        // 3. Unit-to-unit gentle separation to avoid stacking
+        this.game.world.units.forEach(other => {
+            if (other === this || other.isDead || other.isAerial) return;
+            const dx = this.x - other.x;
+            const dy = this.y - other.y;
+            const distSq = dx * dx + dy * dy;
+            const minDist = (this.radius + other.radius) * 0.8; // Allow some overlap
+
+            if (distSq > 0 && distSq < minDist * minDist) {
+                const dist = Math.sqrt(distSq);
+                const overlap = minDist - dist;
+                const pushX = (dx / dist) * overlap * 0.5;
+                const pushY = (dy / dist) * overlap * 0.5;
+
+                this.x += pushX;
+                this.y += pushY;
+                other.x -= pushX;
+                other.y -= pushY;
+            }
+        });
+    }
+
     checkStuck(dt) {
         if (!this.target && !this.attackTarget && this.taskQueue.length === 0) {
             this.stuckTimer = 0;
@@ -456,6 +488,7 @@ class Unit {
 
     update(dt) {
         this.checkStuck(dt);
+        this.resolveCollisions();
         this.timer += dt;
         this.animTimer += dt;
 
@@ -880,7 +913,64 @@ class Unit {
                         const dropOff = this.findNearestDropPoint(this.cargo.type);
                         if (dropOff) {
                             const currentTask = this.taskQueue.shift();
-                            this.taskQueue.unshift({ type: 'deposit', target: dropOff, resume: target.amount > 0 ? currentTask : null });
+
+                            let resumeTask = null;
+                            if (target.amount > 0) {
+                                resumeTask = currentTask;
+                            } else {
+                                // Find nearest resource of the SAME type
+                                let nearestRes = null;
+                                let bestDist = Infinity;
+                                this.game.world.resources.forEach(r => {
+                                    if (r.amount > 0 && r.type === target.type) {
+                                        const dx = this.x - r.x;
+                                        const dy = this.y - r.y;
+                                        const d = dx*dx + dy*dy;
+                                        if (d < bestDist) {
+                                            bestDist = d;
+                                            nearestRes = r;
+                                        }
+                                    }
+                                });
+
+                                if (!nearestRes) {
+                                    // Also check buildings (e.g. coal_mine)
+                                    this.game.world.buildings.forEach(b => {
+                                        if (b.type === target.type && b.amount !== undefined && b.amount > 0 && b.playerId === this.playerId) {
+                                            const dx = this.x - b.x;
+                                            const dy = this.y - b.y;
+                                            const d = dx*dx + dy*dy;
+                                            if (d < bestDist) {
+                                                bestDist = d;
+                                                nearestRes = b;
+                                            }
+                                        }
+                                    });
+                                }
+
+                                if (nearestRes) {
+                                    resumeTask = { type: 'harvest', target: nearestRes };
+
+                                    // Make nearby Vats follow to the new resource!
+                                    this.game.world.units.forEach(v => {
+                                        if (v.type === 'vat' && v.playerId === this.playerId) {
+                                            // If the vat is close to the old depleted resource
+                                            const vdx = v.x - target.x;
+                                            const vdy = v.y - target.y;
+                                            if (vdx*vdx + vdy*vdy < 400 * 400) {
+                                                // Give Vat a move command near the new resource
+                                                const offsetAngle = Math.random() * Math.PI * 2;
+                                                const offsetDist = nearestRes.radius ? nearestRes.radius + 60 : 80;
+                                                const nx = nearestRes.x + Math.cos(offsetAngle) * offsetDist;
+                                                const ny = nearestRes.y + Math.sin(offsetAngle) * offsetDist;
+                                                v.setTarget(nx, ny);
+                                            }
+                                        }
+                                    });
+                                }
+                            }
+
+                            this.taskQueue.unshift({ type: 'deposit', target: dropOff, resume: resumeTask });
                             this.target = null;
                             this.currentPath = [];
                         } else {
@@ -1320,7 +1410,45 @@ class Structure {
                         this.game.ui.showToast(`${this.type.toUpperCase()} complete!`);
                     }
                     // Finish task for all builders
-                    builders.forEach(u => u.taskQueue.shift());
+                    // Finish task for all builders
+                    builders.forEach(u => {
+                        u.taskQueue.shift();
+
+                        // Auto-transition to harvesting if applicable
+                        const resourceTypes = {
+                            'coal_mine': 'coal',
+                            'coffee_splat': 'coffee',
+                            'ink_splat': 'ink'
+                        };
+
+                        if (resourceTypes[this.type]) {
+                            // Find nearest resource of this type
+                            let nearestRes = null;
+                            let bestDist = Infinity;
+                            const resType = resourceTypes[this.type];
+
+                            this.game.world.resources.forEach(r => {
+                                if (r.amount > 0 && (r.type === this.type || r.type === resType)) {
+                                    const dx = u.x - r.x;
+                                    const dy = u.y - r.y;
+                                    const d = dx*dx + dy*dy;
+                                    if (d < bestDist) {
+                                        bestDist = d;
+                                        nearestRes = r;
+                                    }
+                                }
+                            });
+
+                            // Check if the structure itself is a resource (e.g. coal_mine)
+                            if (this.amount !== undefined && this.amount > 0) {
+                                nearestRes = this;
+                            }
+
+                            if (nearestRes) {
+                                u.taskQueue.unshift({ type: 'harvest', target: nearestRes });
+                            }
+                        }
+                    });
                 }
             }
             return;
@@ -1794,7 +1922,45 @@ class Vat extends Unit {
                     this.constructionProgress = 1.0;
                     this.isUnderConstruction = false;
                     // Finish task for all builders
-                    builders.forEach(u => u.taskQueue.shift());
+                    // Finish task for all builders
+                    builders.forEach(u => {
+                        u.taskQueue.shift();
+
+                        // Auto-transition to harvesting if applicable
+                        const resourceTypes = {
+                            'coal_mine': 'coal',
+                            'coffee_splat': 'coffee',
+                            'ink_splat': 'ink'
+                        };
+
+                        if (resourceTypes[this.type]) {
+                            // Find nearest resource of this type
+                            let nearestRes = null;
+                            let bestDist = Infinity;
+                            const resType = resourceTypes[this.type];
+
+                            this.game.world.resources.forEach(r => {
+                                if (r.amount > 0 && (r.type === this.type || r.type === resType)) {
+                                    const dx = u.x - r.x;
+                                    const dy = u.y - r.y;
+                                    const d = dx*dx + dy*dy;
+                                    if (d < bestDist) {
+                                        bestDist = d;
+                                        nearestRes = r;
+                                    }
+                                }
+                            });
+
+                            // Check if the structure itself is a resource (e.g. coal_mine)
+                            if (this.amount !== undefined && this.amount > 0) {
+                                nearestRes = this;
+                            }
+
+                            if (nearestRes) {
+                                u.taskQueue.unshift({ type: 'harvest', target: nearestRes });
+                            }
+                        }
+                    });
                 }
             }
             return;
